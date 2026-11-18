@@ -15,7 +15,48 @@ const { BoardStore, UPLOADS_DIR } = require('./src/store');
 const HTTP_PORT = Number(process.env.PORT || 3000);
 const HTTPS_PORT = Number(process.env.HTTPS_PORT || 3443);
 const HOST = process.env.HOST || '0.0.0.0';
-const TEACHER_PIN = String(process.env.TEACHER_PIN || '1234').trim();
+
+const CFG_FILE = path.join(__dirname, 'data', 'panel.cfg');
+
+function loadTeacherPin() {
+  try {
+    if (fs.existsSync(CFG_FILE)) {
+      const content = fs.readFileSync(CFG_FILE, 'utf8');
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const parts = line.split('=');
+        if (parts[0]?.trim() === 'TEACHER_PIN' && parts[1]?.trim()) {
+          return parts[1].trim();
+        }
+      }
+    }
+  } catch {}
+  return String(process.env.TEACHER_PIN || '1234').trim();
+}
+
+let TEACHER_PIN = loadTeacherPin();
+
+function saveTeacherPinToConfig(newPin) {
+  try {
+    let port = HTTP_PORT;
+    let httpsPort = HTTPS_PORT;
+    if (fs.existsSync(CFG_FILE)) {
+      const content = fs.readFileSync(CFG_FILE, 'utf8');
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const parts = line.split('=');
+        if (parts[0]?.trim() === 'PORT' && parts[1]?.trim()) port = parts[1].trim();
+        if (parts[0]?.trim() === 'HTTPS_PORT' && parts[1]?.trim()) httpsPort = parts[1].trim();
+      }
+    }
+    const out = `PORT=${port}\nHTTPS_PORT=${httpsPort}\nTEACHER_PIN=${newPin}\n`;
+    fs.writeFileSync(CFG_FILE, out, 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Error al guardar panel.cfg:', err.message);
+    return false;
+  }
+}
 
 const app = express();
 const store = new BoardStore();
@@ -267,6 +308,27 @@ app.post('/api/teacher/login', (req, res) => {
 app.post('/api/teacher/verify', (req, res) => {
   const token = String(req.body?.token || '');
   return res.json({ valid: isValidTeacherToken(token) });
+});
+
+app.post('/api/teacher/change-pin', (req, res) => {
+  const token = String(req.body?.token || req.headers['x-teacher-token'] || '');
+  if (!isValidTeacherToken(token)) {
+    return res.status(401).json({ error: 'Acceso no autorizado. Inicia sesión como docente.' });
+  }
+  const currentPin = String(req.body?.currentPin || '').trim();
+  const newPin = String(req.body?.newPin || '').trim();
+
+  if (!currentPin || currentPin !== TEACHER_PIN) {
+    return res.status(400).json({ error: 'El PIN actual ingresado no es correcto.' });
+  }
+  if (!newPin || newPin.length < 4) {
+    return res.status(400).json({ error: 'El nuevo PIN debe tener al menos 4 caracteres.' });
+  }
+
+  TEACHER_PIN = newPin;
+  saveTeacherPinToConfig(newPin);
+  console.log(`[Seguridad] PIN del Profesor actualizado exitosamente.`);
+  return res.json({ ok: true, message: 'PIN del docente actualizado correctamente.' });
 });
 
 app.get('/api/posts', (req, res) => {

@@ -171,6 +171,7 @@
   const STORAGE_NAME_KEY = 'padletlocal_author_name';
   const STORAGE_SOUND_KEY = 'padletlocal_sound_enabled';
   const STORAGE_TEACHER_TOKEN_KEY = 'padletlocal_teacher_token';
+  const STORAGE_TEACHER_NAME_KEY = 'padletlocal_teacher_name';
   const STORAGE_UI_MODE_KEY = 'padletlocal_ui_mode';
   const STORAGE_DENSITY_KEY = 'padletlocal_density_mode';
   const AUTO_COMPACT_THRESHOLD = 6;
@@ -181,6 +182,7 @@
     localStorage.setItem(STORAGE_ID_KEY, authorId);
   }
   let authorName = localStorage.getItem(STORAGE_NAME_KEY) || '';
+  let teacherName = localStorage.getItem(STORAGE_TEACHER_NAME_KEY) || 'Docente';
 
   // --- App State ---
   const state = {
@@ -211,6 +213,7 @@
     pendingResumePostId: null,
     pendingTurnGrant: null, // { queueId, author, reason }
     teacherToken: sessionStorage.getItem(STORAGE_TEACHER_TOKEN_KEY) || '',
+    teacherName,
     isTeacher: false,
     activeTeacherTab: 'assignment',
 
@@ -270,6 +273,60 @@
     notifBadge: document.getElementById('notifBadge'),
     btnTeacherMode: document.getElementById('btnTeacherMode'),
     teacherBtnLabel: document.getElementById('teacherBtnLabel'),
+    btnTeacherQuickTask: document.getElementById('btnTeacherQuickTask'),
+    btnTeacherNewPost: document.getElementById('btnTeacherNewPost'),
+    topTeacherNameDisplay: document.getElementById('topTeacherNameDisplay'),
+    btnStudentMenu: document.getElementById('btnStudentMenu'),
+    btnTeacherMenu: document.getElementById('btnTeacherMenu'),
+    menuBackdropOverlay: document.getElementById('menuBackdropOverlay'),
+    studentActionMenu: document.getElementById('studentActionMenu'),
+    teacherActionMenu: document.getElementById('teacherActionMenu'),
+    studentMenuNameDisplay: document.getElementById('studentMenuNameDisplay'),
+    teacherMenuNameDisplay: document.getElementById('teacherMenuNameDisplay'),
+    btnStudentMenuEditName: document.getElementById('btnStudentMenuEditName'),
+    btnTeacherMenuSettings: document.getElementById('btnTeacherMenuSettings'),
+    studentMenuSoundState: document.getElementById('studentMenuSoundState'),
+    studentMenuUiState: document.getElementById('studentMenuUiState'),
+
+    // Student Menu Items
+    menuItemStudentPost: document.getElementById('menuItemStudentPost'),
+    menuItemStudentScreen: document.getElementById('menuItemStudentScreen'),
+    menuItemStudentTasks: document.getElementById('menuItemStudentTasks'),
+    menuItemStudentQuiz: document.getElementById('menuItemStudentQuiz'),
+    menuItemStudentSessions: document.getElementById('menuItemStudentSessions'),
+    menuItemStudentNetwork: document.getElementById('menuItemStudentNetwork'),
+    menuItemStudentHelp: document.getElementById('menuItemStudentHelp'),
+    menuItemStudentSound: document.getElementById('menuItemStudentSound'),
+    menuItemStudentUiMode: document.getElementById('menuItemStudentUiMode'),
+    menuItemStudentDev: document.getElementById('menuItemStudentDev'),
+    menuItemTeacherLogin: document.getElementById('menuItemTeacherLogin'),
+
+    // Teacher Menu Items
+    menuItemTeacherTask: document.getElementById('menuItemTeacherTask'),
+    menuItemTeacherQuizzes: document.getElementById('menuItemTeacherQuizzes'),
+    menuItemTeacherNotify: document.getElementById('menuItemTeacherNotify'),
+    menuItemTeacherTimers: document.getElementById('menuItemTeacherTimers'),
+    menuItemTeacherSessions: document.getElementById('menuItemTeacherSessions'),
+    menuItemTeacherScreens: document.getElementById('menuItemTeacherScreens'),
+    menuItemTeacherPost: document.getElementById('menuItemTeacherPost'),
+    menuItemTeacherCleanBoard: document.getElementById('menuItemTeacherCleanBoard'),
+    menuItemTeacherSettings: document.getElementById('menuItemTeacherSettings'),
+    menuItemTeacherNetwork: document.getElementById('menuItemTeacherNetwork'),
+    menuItemTeacherDev: document.getElementById('menuItemTeacherDev'),
+    menuItemTeacherLogout: document.getElementById('menuItemTeacherLogout'),
+
+    // Teacher Settings Modal
+    teacherSettingsModal: document.getElementById('teacherSettingsModal'),
+    teacherSettingsForm: document.getElementById('teacherSettingsForm'),
+    settingsTeacherName: document.getElementById('settingsTeacherName'),
+    settingsCurrentPin: document.getElementById('settingsCurrentPin'),
+    settingsNewPin: document.getElementById('settingsNewPin'),
+    settingsConfirmPin: document.getElementById('settingsConfirmPin'),
+    teacherSettingsError: document.getElementById('teacherSettingsError'),
+
+    // Teacher Login input for teacher name
+    inputTeacherName: document.getElementById('inputTeacherName'),
+
     btnNetworkInfo: document.getElementById('btnNetworkInfo'),
     btnOpenScreenModal: document.getElementById('btnOpenScreenModal'),
     btnNewPost: document.getElementById('btnNewPost'),
@@ -582,14 +639,60 @@
     authorName = clean;
     localStorage.setItem(STORAGE_NAME_KEY, authorName);
     updateUserChipUI();
+    updateStudentMenuUI();
   }
 
   updateUserChipUI();
 
+  // --- Role & Action Menus Helpers ---
+  function updateStudentMenuUI() {
+    if (el.studentMenuNameDisplay) {
+      el.studentMenuNameDisplay.textContent = authorName || 'Sin nombre definido';
+    }
+    if (el.studentMenuSoundState) {
+      el.studentMenuSoundState.textContent = state.soundEnabled ? 'Activado (clic para silenciar)' : 'Silenciado (clic para activar)';
+    }
+    if (el.studentMenuUiState) {
+      el.studentMenuUiState.textContent = state.uiMode === 'easy' ? 'Modo Fácil (clic para cambiar)' : 'Modo Completo (clic para cambiar)';
+    }
+  }
+
+  function updateTeacherMenuUI() {
+    const name = state.teacherName || 'Docente';
+    if (el.topTeacherNameDisplay) el.topTeacherNameDisplay.textContent = name;
+    if (el.teacherMenuNameDisplay) el.teacherMenuNameDisplay.textContent = name;
+    if (el.inputTeacherName && !el.inputTeacherName.value) el.inputTeacherName.value = name;
+    if (el.settingsTeacherName) el.settingsTeacherName.value = name;
+  }
+
+  function closeActionMenus() {
+    if (el.studentActionMenu) el.studentActionMenu.classList.add('hidden');
+    if (el.teacherActionMenu) el.teacherActionMenu.classList.add('hidden');
+    if (el.menuBackdropOverlay) el.menuBackdropOverlay.classList.add('hidden');
+    el.btnStudentMenu?.setAttribute('aria-expanded', 'false');
+    el.btnTeacherMenu?.setAttribute('aria-expanded', 'false');
+  }
+
+  function openActionMenu(menuEl, triggerBtn) {
+    closeActionMenus();
+    if (!menuEl) return;
+    menuEl.classList.remove('hidden');
+    if (el.menuBackdropOverlay) el.menuBackdropOverlay.classList.remove('hidden');
+    triggerBtn?.setAttribute('aria-expanded', 'true');
+  }
+
   // --- Teacher Mode Auth & UI ---
   function updateTeacherUI() {
+    // Set strict role classes on body for CSS isolation
+    document.body.classList.toggle('role-teacher', state.isTeacher);
+    document.body.classList.toggle('role-student', !state.isTeacher);
+
+    updateTeacherMenuUI();
+    updateStudentMenuUI();
+    closeActionMenus();
+
     el.btnTeacherMode.classList.toggle('teacher-unlocked', state.isTeacher);
-    el.teacherBtnLabel.textContent = state.isTeacher ? 'Panel Profesor' : 'Profesor';
+    el.teacherBtnLabel.textContent = state.isTeacher ? 'Panel Docente' : 'Docente';
     el.btnEditAssignmentInline.classList.toggle('hidden', !state.isTeacher);
     el.timerTeacherControls.classList.toggle('hidden', !state.isTeacher);
 
@@ -779,13 +882,19 @@
         return;
       }
 
+      const enteredName = el.inputTeacherName?.value?.trim();
+      if (enteredName) {
+        state.teacherName = enteredName;
+        localStorage.setItem(STORAGE_TEACHER_NAME_KEY, enteredName);
+      }
+
       state.teacherToken = data.token;
       state.isTeacher = true;
       sessionStorage.setItem(STORAGE_TEACHER_TOKEN_KEY, data.token);
       closeModal(el.teacherLoginModal);
       socket.emit('client:register', { authorId, teacherToken: state.teacherToken });
       updateTeacherUI();
-      showToast('Modo Profesor activado', 'success');
+      showToast(`¡Bienvenido, ${state.teacherName}! Modo Docente activado.`, 'success');
       const targetTab = state.pendingTeacherTab || 'assignment';
       const targetEditActive = Boolean(state.pendingEditActive);
       state.pendingTeacherTab = null;
@@ -804,7 +913,277 @@
     closeModal(el.teacherPanelModal);
     socket.emit('client:register', { authorId, teacherToken: '' });
     updateTeacherUI();
-    showToast('Saliste del modo Profesor');
+    showToast('Saliste del modo Docente');
+  });
+
+  // --- Action Menu Open / Close Event Listeners ---
+  el.btnStudentMenu?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (el.studentActionMenu && el.studentActionMenu.classList.contains('hidden')) {
+      updateStudentMenuUI();
+      openActionMenu(el.studentActionMenu, el.btnStudentMenu);
+    } else {
+      closeActionMenus();
+    }
+  });
+
+  el.btnTeacherMenu?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (el.teacherActionMenu && el.teacherActionMenu.classList.contains('hidden')) {
+      updateTeacherMenuUI();
+      openActionMenu(el.teacherActionMenu, el.btnTeacherMenu);
+    } else {
+      closeActionMenus();
+    }
+  });
+
+  el.menuBackdropOverlay?.addEventListener('click', () => {
+    closeActionMenus();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (
+      !e.target.closest('#studentActionMenu') &&
+      !e.target.closest('#teacherActionMenu') &&
+      !e.target.closest('#btnStudentMenu') &&
+      !e.target.closest('#btnTeacherMenu')
+    ) {
+      closeActionMenus();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeActionMenus();
+    }
+  });
+
+  // --- Student Menu Items Handlers ---
+  el.btnStudentMenuEditName?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.nameModal);
+    if (el.inputAuthorName) {
+      el.inputAuthorName.value = authorName;
+      el.inputAuthorName.select();
+    }
+  });
+
+  el.menuItemStudentPost?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.composerModal);
+  });
+
+  el.menuItemStudentScreen?.addEventListener('click', () => {
+    closeActionMenus();
+    openScreenShareModal();
+  });
+
+  el.menuItemStudentTasks?.addEventListener('click', () => {
+    closeActionMenus();
+    if (state.assignment || (state.assignmentHistory && state.assignmentHistory.length > 0)) {
+      el.assignmentSection?.classList.remove('hidden');
+      el.assignmentSection?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      showToast('No hay tareas asignadas en esta sesión aún.');
+    }
+  });
+
+  el.menuItemStudentQuiz?.addEventListener('click', () => {
+    closeActionMenus();
+    if (window.PadletQuiz && typeof window.PadletQuiz.openQuizIfActive === 'function') {
+      window.PadletQuiz.openQuizIfActive();
+    } else {
+      showToast('No hay test activo en este momento.');
+    }
+  });
+
+  el.menuItemStudentSessions?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.sessionPickerModal);
+  });
+
+  el.menuItemStudentNetwork?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.networkModal);
+  });
+
+  el.menuItemStudentHelp?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.helpGuideModal);
+  });
+
+  el.menuItemStudentSound?.addEventListener('click', () => {
+    state.soundEnabled = !state.soundEnabled;
+    localStorage.setItem(STORAGE_SOUND_KEY, state.soundEnabled ? 'true' : 'false');
+    el.soundIconOn?.classList.toggle('hidden', !state.soundEnabled);
+    el.soundIconOff?.classList.toggle('hidden', state.soundEnabled);
+    updateStudentMenuUI();
+    showToast(state.soundEnabled ? '🔔 Sonido de alertas activado' : '🔕 Sonido de alertas silenciado');
+  });
+
+  el.menuItemStudentUiMode?.addEventListener('click', () => {
+    const nextMode = state.uiMode === 'easy' ? 'full' : 'easy';
+    setUiMode(nextMode);
+    updateStudentMenuUI();
+    showToast(nextMode === 'easy' ? '🌱 Modo Fácil activado' : '⚡ Modo Completo activado');
+  });
+
+  el.menuItemStudentDev?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.aboutDevModal);
+  });
+
+  el.menuItemTeacherLogin?.addEventListener('click', () => {
+    closeActionMenus();
+    if (el.inputTeacherName) el.inputTeacherName.value = state.teacherName || 'Docente';
+    if (el.inputTeacherPin) el.inputTeacherPin.value = '';
+    el.teacherLoginError?.classList.add('hidden');
+    openModal(el.teacherLoginModal);
+    setTimeout(() => el.inputTeacherPin?.focus(), 120);
+  });
+
+  // --- Teacher Menu Items Handlers ---
+  el.btnTeacherQuickTask?.addEventListener('click', () => {
+    resetAssignmentFormToNew();
+    openTeacherPanel('assignment', { editActive: false });
+  });
+
+  el.btnTeacherNewPost?.addEventListener('click', () => {
+    openModal(el.composerModal);
+  });
+
+  el.menuItemTeacherTask?.addEventListener('click', () => {
+    closeActionMenus();
+    resetAssignmentFormToNew();
+    openTeacherPanel('assignment', { editActive: false });
+  });
+
+  el.menuItemTeacherQuizzes?.addEventListener('click', () => {
+    closeActionMenus();
+    openTeacherPanel('quizzes');
+  });
+
+  el.menuItemTeacherNotify?.addEventListener('click', () => {
+    closeActionMenus();
+    openTeacherPanel('notify');
+  });
+
+  el.menuItemTeacherTimers?.addEventListener('click', () => {
+    closeActionMenus();
+    openTeacherPanel('timers');
+  });
+
+  el.menuItemTeacherSessions?.addEventListener('click', () => {
+    closeActionMenus();
+    openTeacherPanel('sessions');
+  });
+
+  el.menuItemTeacherScreens?.addEventListener('click', () => {
+    closeActionMenus();
+    setWorkspaceView('screens');
+  });
+
+  el.menuItemTeacherPost?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.composerModal);
+  });
+
+  el.menuItemTeacherCleanBoard?.addEventListener('click', () => {
+    closeActionMenus();
+    if (confirm('¿Deseas archivar/limpiar todas las publicaciones del tablero en esta sesión?')) {
+      socket.emit('board:clear', { teacherToken: state.teacherToken });
+      showToast('Tablero limpiado');
+    }
+  });
+
+  function openTeacherSettingsModal() {
+    closeActionMenus();
+    if (el.settingsTeacherName) el.settingsTeacherName.value = state.teacherName || 'Docente';
+    if (el.settingsCurrentPin) el.settingsCurrentPin.value = '';
+    if (el.settingsNewPin) el.settingsNewPin.value = '';
+    if (el.settingsConfirmPin) el.settingsConfirmPin.value = '';
+    el.teacherSettingsError?.classList.add('hidden');
+    openModal(el.teacherSettingsModal);
+    setTimeout(() => el.settingsTeacherName?.focus(), 120);
+  }
+
+  el.btnTeacherMenuSettings?.addEventListener('click', openTeacherSettingsModal);
+  el.menuItemTeacherSettings?.addEventListener('click', openTeacherSettingsModal);
+
+  el.menuItemTeacherNetwork?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.networkModal);
+  });
+
+  el.menuItemTeacherDev?.addEventListener('click', () => {
+    closeActionMenus();
+    openModal(el.aboutDevModal);
+  });
+
+  el.menuItemTeacherLogout?.addEventListener('click', () => {
+    closeActionMenus();
+    el.btnTeacherLogout?.click();
+  });
+
+  // --- Teacher Settings Form (Change PIN & Name) Handler ---
+  el.teacherSettingsForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newName = el.settingsTeacherName.value.trim();
+    const currentPin = el.settingsCurrentPin.value.trim();
+    const newPin = el.settingsNewPin.value.trim();
+    const confirmPin = el.settingsConfirmPin.value.trim();
+
+    el.teacherSettingsError.classList.add('hidden');
+
+    if (!newName) {
+      el.teacherSettingsError.textContent = 'Por favor ingresa tu nombre de docente.';
+      el.teacherSettingsError.classList.remove('hidden');
+      return;
+    }
+
+    if (newPin !== confirmPin) {
+      el.teacherSettingsError.textContent = 'El nuevo PIN y su confirmación no coinciden.';
+      el.teacherSettingsError.classList.remove('hidden');
+      return;
+    }
+
+    if (newPin.length < 4) {
+      el.teacherSettingsError.textContent = 'El nuevo PIN debe tener al menos 4 caracteres o dígitos.';
+      el.teacherSettingsError.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/teacher/change-pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-teacher-token': state.teacherToken,
+        },
+        body: JSON.stringify({
+          token: state.teacherToken,
+          currentPin,
+          newPin,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        el.teacherSettingsError.textContent = data.error || 'Error al actualizar el PIN.';
+        el.teacherSettingsError.classList.remove('hidden');
+        return;
+      }
+
+      state.teacherName = newName;
+      localStorage.setItem(STORAGE_TEACHER_NAME_KEY, newName);
+
+      closeModal(el.teacherSettingsModal);
+      updateTeacherUI();
+      showToast('¡Nombre y PIN del Docente actualizados correctamente!', 'success');
+    } catch {
+      el.teacherSettingsError.textContent = 'No se pudo conectar con el servidor para cambiar el PIN.';
+      el.teacherSettingsError.classList.remove('hidden');
+    }
   });
 
   // --- Compact Click-to-Grow Tasks ("Temas de Tareas") ---

@@ -4156,3 +4156,432 @@ body.mode-easy .form-group textarea {
   border-top: 1px solid var(--border);
   padding-top: 8px;
 }
+
+/* ==========================================================================
+   Role Separation & Action Menus (Docente vs Alumno)
+   ========================================================================== */
+
+/* Strict role-based visibility */
+body.role-student .teacher-only {
+  display: none !important;
+}
+
+body.role-teacher .student-only {
+  display: none !important;
+}
+
+/* Teacher role badge in topbar */
+.teacher-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #c4b5fd;
+  font-size: 0.82rem;
+  font-weight: 600;
+  max-width: 180px;
+}
+
+.teacher-role-icon {
+  font-size: 0.95rem;
+}
+
+.teacher-role-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Action Menu Trigger Buttons */
+.btn-menu-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 0.86rem;
+  padding: 7px 13px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.btn-student-role {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.28);
+}
+
+.btn-student-role:hover {
+  background: linear-gradient(135deg, #0369a1, #075985);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.38);
+}
+
+.btn-teacher-role {
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.28);
+}
+
+.btn-teacher-role:hover {
+  background: linear-gradient(135deg, #4338ca, #3730a3);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.38);
+}
+
+.btn-task-quick {
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-task-quick:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+/* Backdrop for Mobile Menus */
+.menu-backdrop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 1350;
+  animation: fadeInBackdrop 0.18s ease;
+}
+
+@keyframes fadeInBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Dropdown Action Menus */
+.action-menu-dropdown {
+  position: absolute;
+  top: 56px;
+  right: 16px;
+  width: 350px;
+  max-width: calc(100vw - 28px);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 16px;
+  box-shadow: 0 16px 36px -6px rgba(15, 23, 42, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  z-index: 1400;
+  overflow: hidden;
+  animation: menuDropdownSlide 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes menuDropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.action-menu-header {
+  padding: 12px 16px;
+  background: var(--surface-muted, #f8fafc);
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.action-menu-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.action-menu-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  background: #e0f2fe;
+  color: #0369a1;
+  flex-shrink: 0;
+}
+
+.role-menu-teacher .action-menu-avatar {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.action-menu-user-info {
+  min-width: 0;
+}
+
+.action-menu-role-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #64748b);
+  display: block;
+}
+
+.action-menu-user-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text, #1e293b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.action-menu-body {
+  padding: 8px;
+  max-height: 72vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.action-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text, #1e293b);
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.action-menu-item:hover,
+.action-menu-item:focus-visible {
+  background: var(--surface-muted, #f1f5f9);
+  color: var(--text-emphasis, #0f172a);
+}
+
+.action-menu-item-icon {
+  font-size: 1.15rem;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.action-menu-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.action-menu-item-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.86rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-menu-item-desc {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-muted, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-menu-divider {
+  height: 1px;
+  background: var(--border, #e2e8f0);
+  margin: 6px 4px;
+}
+
+.action-menu-item--highlight {
+  background: #f0fdf4;
+  color: #166534;
+}
+.action-menu-item--highlight:hover {
+  background: #dcfce7;
+}
+
+.action-menu-item--danger {
+  color: #dc2626;
+}
+.action-menu-item--danger:hover {
+  background: #fef2f2;
+}
+
+/* ==========================================================================
+   Full Responsive Layout for Mobile & Tablet
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* Sticky Topbar on small screens */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 950;
+  }
+  .topbar-inner {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+  }
+  .brand-title-row h1 {
+    font-size: 1.05rem;
+  }
+  .brand-subtitle {
+    display: none !important;
+  }
+  .topbar-actions {
+    gap: 6px;
+  }
+  .presence-pill {
+    padding: 4px 8px;
+    font-size: 0.74rem;
+  }
+  .presence-label {
+    display: none;
+  }
+
+  /* Bottom sheet drawer for action menus on mobile */
+  .action-menu-dropdown {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100vw;
+    border-radius: 20px 20px 0 0;
+    border: none;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
+    z-index: 1400;
+    animation: menuBottomSheetSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes menuBottomSheetSlide {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .action-menu-body {
+    max-height: 75vh;
+    padding-bottom: 24px;
+  }
+
+  /* Modals responsiveness: fluid width, comfortable touch padding */
+  .modal {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    margin: 10px auto;
+    border-radius: 14px;
+  }
+  .modal-sm {
+    max-width: 95vw !important;
+  }
+  .modal-teacher {
+    max-width: 95vw !important;
+  }
+  .modal-header {
+    padding: 12px 14px;
+  }
+  .modal-body {
+    padding: 14px;
+  }
+  .modal-footer {
+    padding: 12px 14px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* Mobile touch friendliness: min 16px font to prevent iOS zoom */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  .btn, .icon-btn, .action-menu-item {
+    min-height: 40px;
+  }
+
+  /* Teacher Panel tabs scroll smoothly */
+  .teacher-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    gap: 4px;
+  }
+  .teacher-tab {
+    flex-shrink: 0;
+    padding: 7px 11px;
+    font-size: 0.82rem;
+  }
+
+  /* Assignment card & Mini tasks responsive */
+  .assignment-content-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .tasks-mini-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+  }
+
+  /* Board grid responsiveness */
+  .board-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .btn-label,
+  .teacher-role-name,
+  .role-text {
+    display: none;
+  }
+  .teacher-role-badge {
+    padding: 5px 8px;
+  }
+  .btn-menu-role {
+    padding: 7px 10px;
+  }
+  .topbar-actions .btn {
+    padding: 6px 10px;
+  }
+}
+

@@ -6,7 +6,7 @@
   <title>PadletLocal — Panel Colaborativo en Red Local</title>
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
-<body>
+<body class="role-student">
   <!-- Sticky Top Navigation -->
   <header class="topbar">
     <div class="topbar-inner">
@@ -43,49 +43,11 @@
           <input id="searchInput" type="search" placeholder="Buscar tema, autor o texto..." autocomplete="off" />
         </div>
 
-        <div class="mode-switch" id="uiModeToggle" role="group" aria-label="Nivel de interfaz">
-          <button type="button" class="mode-switch-btn" data-ui-mode="easy" title="Interfaz simple con botones grandes para principiantes">🌱 Fácil</button>
-          <button type="button" class="mode-switch-btn active" data-ui-mode="full" title="Todas las herramientas y atajos">⚡ Completo</button>
-        </div>
-
         <div class="presence-pill" title="Usuarios conectados en tiempo real">
           <span class="status-dot" id="connectionDot"></span>
           <span id="onlineCount">1</span>
           <span class="presence-label">en línea</span>
         </div>
-
-        <button id="btnAboutDev" class="dev-branding-btn" title="Sobre CoDevNexus (Desarrollador, Soporte y Actualizaciones)" aria-label="Acerca de CoDevNexus">
-          <span class="dev-logo-symbol">⚡</span>
-          <span class="dev-btn-label">CoDevNexus</span>
-        </button>
-
-        <a id="btnOpenManual" href="/manual-usuarios.html" target="_blank" rel="noopener" class="icon-btn manual-icon-btn" title="Abrir Manual de Usuarios (HTML)" aria-label="Abrir manual de uso">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
-        </a>
-
-        <button id="btnHelpGuide" class="icon-btn help-icon-btn" title="Guía rápida de la plataforma" aria-label="Guía de uso de la plataforma">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-        </button>
-
-        <button id="btnSoundToggle" class="icon-btn advanced-only" title="Sonido de notificaciones activado" aria-label="Alternar sonido de alertas">
-          <svg id="soundIconOn" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-          </svg>
-          <svg id="soundIconOff" class="hidden" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <line x1="23" y1="9" x2="17" y2="15" />
-            <line x1="17" y1="9" x2="23" y2="15" />
-          </svg>
-        </button>
 
         <button id="btnNotifications" class="icon-btn notif-btn" title="Avisos y notificaciones del profesor" aria-label="Notificaciones">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -95,25 +57,24 @@
           <span id="notifBadge" class="notif-badge hidden">0</span>
         </button>
 
-        <button id="btnTeacherMode" class="btn btn-teacher" title="Panel del Profesor: tareas, avisos y recesos">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-            <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
-          </svg>
-          <span id="teacherBtnLabel" class="btn-label">Profesor</span>
-        </button>
+        <!-- Hidden desktop utility anchors for script compatibility -->
+        <div class="hidden">
+          <div class="mode-switch" id="uiModeToggle">
+            <button type="button" class="mode-switch-btn" data-ui-mode="easy">🌱 Fácil</button>
+            <button type="button" class="mode-switch-btn active" data-ui-mode="full">⚡ Completo</button>
+          </div>
+          <button id="btnSoundToggle" class="icon-btn">
+            <svg id="soundIconOn" width="17" height="17" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /></svg>
+            <svg id="soundIconOff" class="hidden" width="17" height="17" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /></svg>
+          </button>
+          <a id="btnOpenManual" href="/manual-usuarios.html" target="_blank" rel="noopener"></a>
+          <button id="btnHelpGuide"></button>
+          <button id="btnAboutDev"></button>
+          <button id="btnNetworkInfo"></button>
+        </div>
 
-        <button id="btnNetworkInfo" class="btn btn-secondary" title="Ver IP local y código QR para otros usuarios">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12.55a11 11 0 0 1 14.08 0" />
-            <path d="M1.42 9a16 16 0 0 1 21.16 0" />
-            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
-            <line x1="12" y1="20" x2="12.01" y2="20" />
-          </svg>
-          <span class="btn-label">Red local</span>
-        </button>
-
-        <button id="btnOpenScreenModal" class="btn btn-live" title="Compartir pantalla o pedir turno en la cola">
+        <!-- Student-Only Topbar Actions -->
+        <button id="btnOpenScreenModal" class="btn btn-live student-only" title="Compartir pantalla o pedir turno en la cola">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="3" width="20" height="14" rx="2" />
             <line x1="8" y1="21" x2="16" y2="21" />
@@ -122,16 +83,268 @@
           <span>Pantalla</span>
         </button>
 
-        <button id="btnNewPost" class="btn btn-primary">
+        <button id="btnNewPost" class="btn btn-primary student-only" title="Publicar aporte en el panel">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           <span>Publicar</span>
         </button>
+
+        <button id="btnStudentMenu" class="btn btn-menu-role btn-student-role student-only" aria-haspopup="true" aria-expanded="false" title="Menú de herramientas del alumno">
+          <span class="role-icon">🎒</span>
+          <span class="role-text">Menú Alumno</span>
+        </button>
+
+        <!-- Teacher-Only Topbar Actions -->
+        <div class="teacher-role-badge teacher-only" title="Sesión activa como Docente">
+          <span class="teacher-role-icon">🎓</span>
+          <span id="topTeacherNameDisplay" class="teacher-role-name">Docente</span>
+        </div>
+
+        <button id="btnTeacherQuickTask" class="btn btn-task-quick teacher-only" title="Crear o redactar una nueva tarea limpia para los alumnos">
+          <span>📝 + Tarea</span>
+        </button>
+
+        <button id="btnTeacherMode" class="btn btn-teacher teacher-only" title="Panel del Profesor: tareas, avisos y recesos">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+            <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
+          </svg>
+          <span id="teacherBtnLabel" class="btn-label">Panel Docente</span>
+        </button>
+
+        <button id="btnTeacherNewPost" class="btn btn-primary teacher-only" title="Publicar aporte del docente en el panel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>Publicar</span>
+        </button>
+
+        <button id="btnTeacherMenu" class="btn btn-menu-role btn-teacher-role teacher-only" aria-haspopup="true" aria-expanded="false" title="Menú de herramientas del docente">
+          <span class="role-icon">⚙️</span>
+          <span class="role-text">Menú Docente</span>
+        </button>
       </div>
     </div>
   </header>
+
+  <!-- Mobile Backdrop Overlay for Menus -->
+  <div id="menuBackdropOverlay" class="menu-backdrop-overlay hidden"></div>
+
+  <!-- Student Action Menu Dropdown / Bottom Sheet -->
+  <div id="studentActionMenu" class="action-menu-dropdown role-menu-student hidden" role="menu" aria-label="Menú del Alumno">
+    <div class="action-menu-header">
+      <div class="action-menu-title-group">
+        <div class="action-menu-avatar">🎒</div>
+        <div class="action-menu-user-info">
+          <span class="action-menu-role-tag">Estudiante</span>
+          <span id="studentMenuNameDisplay" class="action-menu-user-name">Sin nombre definido</span>
+        </div>
+      </div>
+      <button type="button" id="btnStudentMenuEditName" class="btn btn-xs btn-secondary" title="Cambiar tu nombre de estudiante">✏️ Nombre</button>
+    </div>
+    <div class="action-menu-body">
+      <div class="action-menu-list">
+        <button type="button" class="action-menu-item" id="menuItemStudentPost">
+          <span class="action-menu-item-icon">✍️</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Publicar aporte / Padlet</span>
+            <span class="action-menu-item-desc">Crear nota con texto, enlace o imagen</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentScreen">
+          <span class="action-menu-item-icon">🖥️</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Compartir pantalla / Pedir turno</span>
+            <span class="action-menu-item-desc">Proyectar tu trabajo o unirte a la fila</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentTasks">
+          <span class="action-menu-item-icon">📌</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Ver Temas de Tareas</span>
+            <span class="action-menu-item-desc">Consultar la consigna asignada por el docente</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentQuiz">
+          <span class="action-menu-item-icon">🧠</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Test / Quiz en Vivo</span>
+            <span class="action-menu-item-desc">Responder preguntas activadas por el docente</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentSessions">
+          <span class="action-menu-item-icon">📚</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Cambiar de Sesión</span>
+            <span class="action-menu-item-desc">Elegir otra clase o grupo de trabajo</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentNetwork">
+          <span class="action-menu-item-icon">📶</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Red Local y Código QR</span>
+            <span class="action-menu-item-desc">Ver dirección IP y código para celular</span>
+          </div>
+        </button>
+        <a href="/manual-usuarios.html" target="_blank" rel="noopener" class="action-menu-item" id="menuItemStudentManual">
+          <span class="action-menu-item-icon">📖</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Manual de Usuarios (HTML)</span>
+            <span class="action-menu-item-desc">Guía completa paso a paso</span>
+          </div>
+        </a>
+        <button type="button" class="action-menu-item" id="menuItemStudentHelp">
+          <span class="action-menu-item-icon">❓</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Guía rápida de la plataforma</span>
+            <span class="action-menu-item-desc">Consejos prácticos y preguntas frecuentes</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentSound">
+          <span class="action-menu-item-icon">🔊</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Sonido de notificaciones</span>
+            <span class="action-menu-item-desc" id="studentMenuSoundState">Activado</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentUiMode">
+          <span class="action-menu-item-icon">🌱</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Nivel de Interfaz</span>
+            <span class="action-menu-item-desc" id="studentMenuUiState">Modo Completo</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentDev">
+          <span class="action-menu-item-icon">⚡</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Sobre CoDevNexus</span>
+            <span class="action-menu-item-desc">Desarrollador, soporte y actualizaciones</span>
+          </div>
+        </button>
+        <div class="action-menu-divider"></div>
+        <button type="button" class="action-menu-item action-menu-item--highlight" id="menuItemTeacherLogin">
+          <span class="action-menu-item-icon">🎓</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Acceso Docente</span>
+            <span class="action-menu-item-desc">Ingresar PIN para gestionar la clase</span>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Teacher Action Menu Dropdown / Bottom Sheet -->
+  <div id="teacherActionMenu" class="action-menu-dropdown role-menu-teacher hidden" role="menu" aria-label="Menú del Docente">
+    <div class="action-menu-header">
+      <div class="action-menu-title-group">
+        <div class="action-menu-avatar">🎓</div>
+        <div class="action-menu-user-info">
+          <span class="action-menu-role-tag">Docente Administrador</span>
+          <span id="teacherMenuNameDisplay" class="action-menu-user-name">Profesor</span>
+        </div>
+      </div>
+      <button type="button" id="btnTeacherMenuSettings" class="btn btn-xs btn-secondary" title="Cambiar tu nombre y PIN de docente">🔑 PIN / Nombre</button>
+    </div>
+    <div class="action-menu-body">
+      <div class="action-menu-list">
+        <button type="button" class="action-menu-item action-menu-item--highlight" id="menuItemTeacherTask">
+          <span class="action-menu-item-icon">📝</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Nueva Tarea (Formulario Limpio)</span>
+            <span class="action-menu-item-desc">Crear consigna con o sin imagen para los alumnos</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherQuizzes">
+          <span class="action-menu-item-icon">🧠</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Crear Tests / Quizzes</span>
+            <span class="action-menu-item-desc">Preguntas de opción múltiple con tiempo</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherNotify">
+          <span class="action-menu-item-icon">📢</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Enviar Notificación en Vivo</span>
+            <span class="action-menu-item-desc">Aviso emergente con sonido a todos</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherTimers">
+          <span class="action-menu-item-icon">⏱️</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Recesos y Cuenta Regresiva</span>
+            <span class="action-menu-item-desc">Iniciar descanso de 5, 10, 15+ min</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherSessions">
+          <span class="action-menu-item-icon">📚</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Administrar Sesiones</span>
+            <span class="action-menu-item-desc">Crear, cerrar o despublicar clases</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherScreens">
+          <span class="action-menu-item-icon">🖥️</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Control de Pantallas y Cola</span>
+            <span class="action-menu-item-desc">Gestionar turnos de exposición</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherPost">
+          <span class="action-menu-item-icon">✍️</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Publicar Aporte Docente</span>
+            <span class="action-menu-item-desc">Publicar una nota destacada en el tablero</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherCleanBoard">
+          <span class="action-menu-item-icon">🧹</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Limpiar publicaciones del tablero</span>
+            <span class="action-menu-item-desc">Archivar publicaciones de esta sesión</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherSettings">
+          <span class="action-menu-item-icon">🔑</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Cambiar PIN y Nombre del Docente</span>
+            <span class="action-menu-item-desc">Actualizar credenciales de seguridad</span>
+          </div>
+        </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherNetwork">
+          <span class="action-menu-item-icon">📶</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Red Local y Código QR</span>
+            <span class="action-menu-item-desc">Compartir enlace local con los alumnos</span>
+          </div>
+        </button>
+        <a href="/manual-profesor.html" target="_blank" rel="noopener" class="action-menu-item" id="menuItemTeacherManual">
+          <span class="action-menu-item-icon">📖</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Manual del Profesor (HTML)</span>
+            <span class="action-menu-item-desc">Guía para el docente</span>
+          </div>
+        </a>
+        <button type="button" class="action-menu-item" id="menuItemTeacherDev">
+          <span class="action-menu-item-icon">⚡</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Sobre CoDevNexus</span>
+            <span class="action-menu-item-desc">Desarrollador, soporte y actualizaciones</span>
+          </div>
+        </button>
+        <div class="action-menu-divider"></div>
+        <button type="button" class="action-menu-item action-menu-item--danger" id="menuItemTeacherLogout">
+          <span class="action-menu-item-icon">🚪</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Cerrar Sesión Docente</span>
+            <span class="action-menu-item-desc">Volver a la vista de alumno</span>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- HTTP Warning Banner for WebRTC Screen Sharing over LAN -->
   <div id="httpsBanner" class="https-banner hidden" role="status">
@@ -220,7 +433,7 @@
         <strong>📌 Temas de Tareas</strong>
         <span class="tasks-strip-hint">Haz clic en una tarea pequeña para verla en grande</span>
       </div>
-      <button id="btnEditAssignmentInline" class="btn btn-sm btn-secondary hidden">✏️ Editar tarea</button>
+      <button id="btnEditAssignmentInline" class="btn btn-sm btn-secondary teacher-only hidden">✏️ Editar tarea</button>
     </div>
 
     <div id="tasksMiniGrid" class="tasks-mini-grid">
@@ -413,19 +626,58 @@
   <div id="teacherLoginModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="teacherLoginTitle">
     <div class="modal modal-sm">
       <div class="modal-header">
-        <h2 id="teacherLoginTitle">Acceso Modo Profesor</h2>
+        <h2 id="teacherLoginTitle">Acceso Modo Docente</h2>
         <button class="icon-btn" data-close-modal="teacherLoginModal" aria-label="Cerrar">✕</button>
       </div>
-      <form id="teacherLoginForm" class="modal-body">
-        <p class="modal-intro">Ingresa el PIN del profesor para publicar tareas, enviar notificaciones en vivo y programar recesos con cuenta regresiva.</p>
+      <form id="teacherLoginForm" class="modal-body stack-form">
+        <p class="modal-intro">Ingresa el PIN del docente para gestionar tareas, crear tests, enviar notificaciones en vivo y administrar sesiones.</p>
         <div class="form-group">
-          <label for="inputTeacherPin">PIN del Profesor</label>
-          <input id="inputTeacherPin" type="password" inputmode="numeric" maxlength="20" placeholder="Ingresa el PIN (visible en la consola del servidor)" required />
+          <label for="inputTeacherName">Nombre del Docente (opcional)</label>
+          <input id="inputTeacherName" type="text" maxlength="60" placeholder="Ej. Prof. Juan Pérez" />
+          <small class="field-hint">Aparecerá en el panel y en las notificaciones para los alumnos.</small>
+        </div>
+        <div class="form-group">
+          <label for="inputTeacherPin">PIN del Docente <span class="req">*</span></label>
+          <input id="inputTeacherPin" type="password" inputmode="numeric" maxlength="20" placeholder="Ingresa tu PIN de docente" required />
         </div>
         <div id="teacherLoginError" class="form-error hidden"></div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" data-close-modal="teacherLoginModal">Cancelar</button>
           <button type="submit" class="btn btn-primary">Desbloquear Panel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Teacher Settings (Change PIN & Name) -->
+  <div id="teacherSettingsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="teacherSettingsTitle">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="teacherSettingsTitle">Configurar Docente</h2>
+        <button class="icon-btn" data-close-modal="teacherSettingsModal" aria-label="Cerrar">✕</button>
+      </div>
+      <form id="teacherSettingsForm" class="modal-body stack-form">
+        <p class="modal-intro">Personaliza tu nombre de docente y actualiza el PIN de acceso seguro al panel.</p>
+        <div class="form-group">
+          <label for="settingsTeacherName">Nombre del Docente <span class="req">*</span></label>
+          <input id="settingsTeacherName" type="text" maxlength="60" placeholder="Ej. Prof. Juan Pérez" required />
+        </div>
+        <div class="form-group">
+          <label for="settingsCurrentPin">PIN Actual <span class="req">*</span></label>
+          <input id="settingsCurrentPin" type="password" inputmode="numeric" maxlength="20" placeholder="Ingresa tu PIN actual" required />
+        </div>
+        <div class="form-group">
+          <label for="settingsNewPin">Nuevo PIN (mínimo 4 caracteres) <span class="req">*</span></label>
+          <input id="settingsNewPin" type="password" inputmode="numeric" maxlength="20" placeholder="Nuevo PIN de acceso" required />
+        </div>
+        <div class="form-group">
+          <label for="settingsConfirmPin">Confirmar Nuevo PIN <span class="req">*</span></label>
+          <input id="settingsConfirmPin" type="password" inputmode="numeric" maxlength="20" placeholder="Repite el nuevo PIN" required />
+        </div>
+        <div id="teacherSettingsError" class="form-error hidden"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close-modal="teacherSettingsModal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar Cambios</button>
         </div>
       </form>
     </div>
