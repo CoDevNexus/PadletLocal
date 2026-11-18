@@ -459,10 +459,11 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
-        <span>Estás conectado por <strong>HTTP</strong>. Para compartir tu pantalla por WebRTC en red local, abre la versión segura <strong>HTTPS</strong>.</span>
+        <span id="httpsBannerText">Estás conectado por <strong>HTTP</strong>. Para compartir tu pantalla o cámara en red local, abre la versión segura <strong>HTTPS</strong>.</span>
       </div>
       <div class="https-banner-actions">
-        <a href="/cert/Instalar-Certificado-Windows.bat" class="btn btn-sm btn-secondary" title="Instala el certificado local en Windows para entrar a HTTPS sin pantalla roja">🔒 Quitar pantalla roja (Windows)</a>
+        <a id="bannerBatLink" href="/cert/Instalar-Certificado-Windows.bat" class="btn btn-sm btn-secondary" title="Instala el certificado local en Windows para entrar a HTTPS sin pantalla roja">🪟 Quitar pantalla roja (Windows)</a>
+        <button type="button" id="bannerMobileCertBtn" class="btn btn-sm btn-secondary hidden" title="Guía y certificado para celulares">📱 Guía / Certificado Celular</button>
         <a id="httpsSwitchLink" href="#" class="btn btn-sm btn-amber">Abrir en HTTPS</a>
         <button id="btnDismissHttpsBanner" class="icon-btn-subtle" aria-label="Cerrar aviso">✕</button>
       </div>
@@ -1250,11 +1251,40 @@
           <label for="screenReasonInput">Motivo / ¿Qué vas a mostrar? <span class="req">*</span></label>
           <input id="screenReasonInput" type="text" maxlength="120" placeholder="Ej. Duda en el paso 2, mostrar avance, error al ejecutar..." required />
         </div>
+        <div id="screenSourceSelectorGroup" class="form-group hidden">
+          <label class="form-label" style="font-weight:600;font-size:0.86rem;margin-bottom:6px;display:block;">¿Qué deseas transmitir en vivo?</label>
+          <div class="screen-source-grid">
+            <label class="screen-source-option active" id="optSourceCamera">
+              <input type="radio" name="screenSourceChoice" value="camera" checked style="display:none;" />
+              <div class="opt-icon">📷</div>
+              <div class="opt-text">
+                <strong>Cámara / Cuaderno en vivo</strong>
+                <small>Apunta tu cuaderno, ejercicio o pizarra con la cámara del celular.</small>
+              </div>
+            </label>
+            <label class="screen-source-option" id="optSourceScreen">
+              <input type="radio" name="screenSourceChoice" value="screen" style="display:none;" />
+              <div class="opt-icon">🖥️</div>
+              <div class="opt-text">
+                <strong>Pantalla del dispositivo</strong>
+                <small>Transmitir pantalla si tu navegador móvil lo admite.</small>
+              </div>
+            </label>
+          </div>
+          <div id="cameraFacingRow" class="form-group" style="margin-top:8px;">
+            <label for="cameraFacingSelect" style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:4px;">Lente de cámara:</label>
+            <select id="cameraFacingSelect" class="form-select form-select-sm" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);">
+              <option value="environment" selected>📷 Cámara Trasera (ideal para cuaderno/mesa)</option>
+              <option value="user">🤳 Cámara Frontal (para hablar a la clase)</option>
+            </select>
+          </div>
+        </div>
         <div id="screenModalError" class="form-error hidden"></div>
         <div class="modal-footer screen-modal-footer">
           <button type="button" id="btnJoinScreenQueue" class="btn btn-secondary">🙋 Pedir turno (encolar)</button>
           <button type="submit" id="btnStartScreenDirect" class="btn btn-live">🖥️ Compartir ahora</button>
         </div>
+        <button type="button" id="btnUploadScreenCapture" class="btn btn-ghost hidden" style="width:100%;margin-top:8px;justify-content:center;">🖼️ Subir foto / captura en su lugar</button>
       </form>
     </div>
   </div>
@@ -1316,23 +1346,86 @@
   <div id="httpsRequiredModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
     <div class="modal modal-sm">
       <div class="modal-header">
-        <h2>Se requiere HTTPS para compartir pantalla</h2>
+        <h2 id="httpsRequiredModalTitle">Se requiere HTTPS para transmitir</h2>
         <button class="icon-btn" data-close-modal="httpsRequiredModal" aria-label="Cerrar">✕</button>
       </div>
       <div class="modal-body">
-        <p>Por seguridad, los navegadores solo permiten capturar la pantalla (<code>getDisplayMedia</code>) en conexiones <strong>HTTPS</strong> o en <code>localhost</code>.</p>
-        <p>PadletLocal ya tiene un servidor HTTPS activo en tu red local. Ábrelo ahora para compartir tu pantalla sin problemas:</p>
+        <p id="httpsRequiredDesc">Por seguridad de los navegadores, las funciones de transmisión en vivo (cámara o pantalla) en red local requieren una conexión <strong>HTTPS</strong> segura.</p>
         <div class="url-card url-card-primary">
           <div class="url-row">
             <code id="httpsRequiredUrl">https://...</code>
             <a id="httpsRequiredGoBtn" href="#" class="btn btn-sm btn-primary">Ir a HTTPS</a>
           </div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div id="desktopCertActions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <a href="/cert/Instalar-Certificado-Windows.bat" class="btn btn-sm btn-secondary">🪟 Quitar pantalla roja (Windows)</a>
           <a href="/cert/PadletLocal-RootCA.crt" class="btn btn-sm btn-ghost">Descargar .crt</a>
         </div>
-        <small class="muted-note">Si instalas el certificado una sola vez, HTTPS abrirá sin ninguna advertencia roja.</small>
+        <div id="mobileCertActions" class="hidden" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <button type="button" id="btnOpenMobileCertGuide" class="btn btn-sm btn-secondary" style="flex:1;justify-content:center;">📱 Ver guía celular (2 toques sin error)</button>
+          <a href="/cert/PadletLocal-RootCA.crt" class="btn btn-sm btn-ghost" download>Descargar .crt</a>
+        </div>
+        <small id="httpsRequiredFooterNote" class="muted-note" style="display:block;margin-top:8px;">Si instalas el certificado una sola vez, HTTPS abrirá sin ninguna advertencia roja.</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Mobile Certificate & HTTPS Helper Guide -->
+  <div id="mobileCertModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="mobileCertModalTitle">
+    <div class="modal modal-network" style="max-width: 540px;">
+      <div class="modal-header">
+        <h2 id="mobileCertModalTitle">📱 Acceso HTTPS en Celulares</h2>
+        <button class="icon-btn" data-close-modal="mobileCertModal" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="mobileDetectedBadge" class="mobile-detected-badge" style="display:flex;align-items:center;gap:8px;background:var(--primary-soft);color:var(--primary);padding:8px 12px;border-radius:10px;font-size:0.88rem;font-weight:600;margin-bottom:14px;">
+          <span>📱 Dispositivo móvil detectado</span>
+        </div>
+
+        <div class="mobile-guide-section" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;">
+          <h3 style="font-size:0.95rem;margin:0 0 8px;color:var(--text);display:flex;align-items:center;gap:6px;">
+            <span>⚡ Opción Rápida (Recomendada - ¡Entra en 2 toques!)</span>
+          </h3>
+          <p style="font-size:0.86rem;color:var(--text-muted);margin:0 0 10px;">
+            Al abrir el enlace HTTPS, tu navegador mostrará una advertencia de seguridad normal en redes locales. Puedes continuar directamente sin instalar nada:
+          </p>
+          <div style="background:var(--bg-input);padding:10px 12px;border-radius:8px;font-size:0.84rem;line-height:1.5;">
+            <p style="margin:0 0 6px;"><strong>En Android (Chrome / Brave):</strong><br/>1. Toca en <em>"Configuración avanzada"</em>.<br/>2. Toca en <em>"Acceder a este sitio (no seguro)"</em>.</p>
+            <p style="margin:0;"><strong>En iPhone / iPad (Safari):</strong><br/>1. Toca en <em>"Mostrar detalles"</em>.<br/>2. Toca en <em>"visitar este sitio web"</em> y confirma.</p>
+          </div>
+          <div style="margin-top:12px;">
+            <a id="btnGoHttpsDirectMobile" href="#" class="btn btn-primary btn-block" style="width:100%;justify-content:center;">🚀 Abrir PadletLocal en HTTPS</a>
+          </div>
+        </div>
+
+        <div class="mobile-guide-section" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:12px;padding:14px;">
+          <h3 style="font-size:0.95rem;margin:0 0 8px;color:var(--text);display:flex;align-items:center;gap:6px;">
+            <span>🔒 Opción Certificado CA permanente (.crt)</span>
+          </h3>
+          <p style="font-size:0.84rem;color:var(--text-muted);margin:0 0 10px;">
+            Para instalar el certificado de autoridad en tu teléfono y tener candado verde permanente (no requiere .bat):
+          </p>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <a href="/cert/PadletLocal-RootCA.crt" class="btn btn-secondary btn-sm" download style="flex:1;justify-content:center;">📥 Descargar Certificado CA (.crt)</a>
+          </div>
+          <details style="font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;background:var(--bg-input);padding:8px 10px;border-radius:8px;">
+            <summary style="cursor:pointer;font-weight:600;color:var(--text);">Pasos en Android</summary>
+            <ol style="margin:6px 0 0 16px;padding:0;">
+              <li>Descarga el archivo <code>PadletLocal-RootCA.crt</code> con el botón de arriba.</li>
+              <li>Abre <strong>Ajustes</strong> del celular → <strong>Seguridad</strong> (o <em>"Cifrado y credenciales"</em>).</li>
+              <li>Toca en <strong>Instalar certificado</strong> → <strong>Certificado de CA</strong>.</li>
+              <li>Selecciona <em>"Instalar de todos modos"</em> y elige el archivo descargado.</li>
+            </ol>
+          </details>
+          <details style="font-size:0.82rem;color:var(--text-muted);background:var(--bg-input);padding:8px 10px;border-radius:8px;">
+            <summary style="cursor:pointer;font-weight:600;color:var(--text);">Pasos en iPhone / iPad (iOS)</summary>
+            <ol style="margin:6px 0 0 16px;padding:0;">
+              <li>Descarga el archivo en Safari y toca <em>"Permitir"</em> el perfil.</li>
+              <li>Abre <strong>Ajustes</strong> → Toca en <strong>Perfil descargado</strong> (arriba) → <strong>Instalar</strong>.</li>
+              <li>Abre <strong>Ajustes</strong> → <strong>General</strong> → <strong>Información</strong> → <strong>Ajustes de confianza de certificados</strong> (abajo) → Activa <strong>PadletLocal Root CA</strong>.</li>
+            </ol>
+          </details>
+        </div>
       </div>
     </div>
   </div>

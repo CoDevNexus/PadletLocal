@@ -23,12 +23,41 @@
       this.bindSignalingEvents();
     }
 
-    isSecureContextAvailable() {
+    isSecureContext() {
       return Boolean(
-        window.isSecureContext &&
+        window.isSecureContext ||
+          window.location.protocol === 'https:' ||
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1'
+      );
+    }
+
+    isMobileDevice() {
+      return Boolean(
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+          (navigator.maxTouchPoints > 1 && window.innerWidth <= 1024)
+      );
+    }
+
+    canShareScreen() {
+      return Boolean(
+        this.isSecureContext() &&
           navigator.mediaDevices &&
           typeof navigator.mediaDevices.getDisplayMedia === 'function'
       );
+    }
+
+    canShareCamera() {
+      return Boolean(
+        this.isSecureContext() &&
+          navigator.mediaDevices &&
+          typeof navigator.mediaDevices.getUserMedia === 'function'
+      );
+    }
+
+    isSecureContextAvailable() {
+      // Returns true if device can share either screen or camera
+      return this.canShareScreen() || this.canShareCamera();
     }
 
     isPresenting(postId) {
@@ -70,8 +99,8 @@
       return true;
     }
 
-    async startSharing(postId, { authorId, authorName }) {
-      if (!this.isSecureContextAvailable()) {
+    async startSharing(postId, { authorId, authorName, streamSource = 'screen', facingMode = 'environment' } = {}) {
+      if (!this.isSecureContext()) {
         const err = new Error('HTTPS_REQUIRED');
         err.code = 'HTTPS_REQUIRED';
         throw err;
@@ -82,27 +111,65 @@
       }
 
       let stream;
-      try {
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            cursor: 'always',
-            frameRate: { ideal: 24, max: 30 },
-          },
-          audio: true,
-        });
-      } catch (err) {
-        // User cancelled the picker
-        if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+      const isCamera = streamSource === 'camera';
+
+      if (isCamera) {
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+          const err = new Error('Tu dispositivo o navegador no admite acceso a la cámara.');
+          err.code = 'CAMERA_UNSUPPORTED';
           throw err;
         }
-        // Retry without audio if device/browser rejected audio capture
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            cursor: 'always',
-            frameRate: { ideal: 24, max: 30 },
-          },
-          audio: false,
-        });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facingMode || 'environment' },
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+            },
+            audio: true,
+          });
+        } catch (camErr) {
+          if (camErr.name === 'NotAllowedError' || camErr.name === 'AbortError') {
+            throw camErr;
+          }
+          // Retry without audio if microphone was rejected
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facingMode || 'environment' },
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+            },
+            audio: false,
+          });
+        }
+      } else {
+        // Screen capture
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+          const err = new Error('SCREEN_CAPTURE_UNSUPPORTED');
+          err.code = 'SCREEN_CAPTURE_UNSUPPORTED';
+          throw err;
+        }
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              cursor: 'always',
+              frameRate: { ideal: 24, max: 30 },
+            },
+            audio: true,
+          });
+        } catch (err) {
+          if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+            throw err;
+          }
+          // Retry without audio if device/browser rejected audio capture
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              cursor: 'always',
+              frameRate: { ideal: 24, max: 30 },
+            },
+            audio: false,
+          });
+        }
       }
 
       this.localStreams.set(postId, stream);
@@ -121,7 +188,7 @@
       const ack = await new Promise((resolve) => {
         this.socket.emit(
           'screen:start',
-          { postId, authorId, authorName },
+          { postId, authorId, authorName, sourceType: isCamera ? 'camera' : 'screen' },
           (response) => resolve(response || { ok: false, error: 'Sin respuesta del servidor.' })
         );
       });

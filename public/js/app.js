@@ -250,6 +250,13 @@
     return Date.now() + state.serverOffsetMs;
   }
 
+  // --- Mobile Device Detection ---
+  const isMobileDevice =
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && window.innerWidth <= 1024);
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   // --- DOM References ---
   const el = {
     boardTitle: document.getElementById('boardTitle'),
@@ -379,8 +386,10 @@
     btnNetworkInfo: document.getElementById('btnNetworkInfo'),
     btnOpenScreenModal: document.getElementById('btnOpenScreenModal'),
     btnNewPost: document.getElementById('btnNewPost'),
-    fabNewPost: document.getElementById('fabNewPost'),
     httpsBanner: document.getElementById('httpsBanner'),
+    httpsBannerText: document.getElementById('httpsBannerText'),
+    bannerBatLink: document.getElementById('bannerBatLink'),
+    bannerMobileCertBtn: document.getElementById('bannerMobileCertBtn'),
     httpsSwitchLink: document.getElementById('httpsSwitchLink'),
     btnDismissHttpsBanner: document.getElementById('btnDismissHttpsBanner'),
 
@@ -575,8 +584,27 @@
 
     // HTTPS required modal
     httpsRequiredModal: document.getElementById('httpsRequiredModal'),
+    httpsRequiredModalTitle: document.getElementById('httpsRequiredModalTitle'),
+    httpsRequiredDesc: document.getElementById('httpsRequiredDesc'),
     httpsRequiredUrl: document.getElementById('httpsRequiredUrl'),
     httpsRequiredGoBtn: document.getElementById('httpsRequiredGoBtn'),
+    desktopCertActions: document.getElementById('desktopCertActions'),
+    mobileCertActions: document.getElementById('mobileCertActions'),
+    btnOpenMobileCertGuide: document.getElementById('btnOpenMobileCertGuide'),
+
+    // Mobile Cert Modal
+    mobileCertModal: document.getElementById('mobileCertModal'),
+    mobileCertModalTitle: document.getElementById('mobileCertModalTitle'),
+    mobileDetectedBadge: document.getElementById('mobileDetectedBadge'),
+    btnGoHttpsDirectMobile: document.getElementById('btnGoHttpsDirectMobile'),
+
+    // Screen Share Modal Elements
+    screenSourceSelectorGroup: document.getElementById('screenSourceSelectorGroup'),
+    optSourceCamera: document.getElementById('optSourceCamera'),
+    optSourceScreen: document.getElementById('optSourceScreen'),
+    cameraFacingRow: document.getElementById('cameraFacingRow'),
+    cameraFacingSelect: document.getElementById('cameraFacingSelect'),
+    btnUploadScreenCapture: document.getElementById('btnUploadScreenCapture'),
 
     // Board edit modal
     boardEditModal: document.getElementById('boardEditModal'),
@@ -1985,6 +2013,24 @@
       el.httpsSwitchLink.href = directHttpsUrl;
       el.httpsRequiredUrl.textContent = directHttpsUrl;
       el.httpsRequiredGoBtn.href = directHttpsUrl;
+      if (el.btnGoHttpsDirectMobile) el.btnGoHttpsDirectMobile.href = directHttpsUrl;
+
+      if (isMobileDevice) {
+        if (el.bannerBatLink) el.bannerBatLink.classList.add('hidden');
+        if (el.bannerMobileCertBtn) el.bannerMobileCertBtn.classList.remove('hidden');
+        if (el.desktopCertActions) el.desktopCertActions.classList.add('hidden');
+        if (el.mobileCertActions) el.mobileCertActions.classList.remove('hidden');
+        if (el.httpsBannerText) {
+          el.httpsBannerText.innerHTML = 'Estás en un celular o tablet por <strong>HTTP</strong>. Para usar cámara y transmisión en vivo, abre en <strong>HTTPS</strong>.';
+        }
+        if (el.mobileDetectedBadge) {
+          el.mobileDetectedBadge.textContent = isAndroid
+            ? '🤖 Celular Android detectado'
+            : isIOS
+            ? '🍎 iPhone / iPad (iOS) detectado'
+            : '📱 Dispositivo móvil detectado';
+        }
+      }
 
       if (!window.isSecureContext && window.location.protocol === 'http:') {
         el.httpsBanner.classList.remove('hidden');
@@ -2018,6 +2064,19 @@
   el.btnDismissHttpsBanner.addEventListener('click', () => {
     el.httpsBanner.classList.add('hidden');
   });
+
+  if (el.bannerMobileCertBtn) {
+    el.bannerMobileCertBtn.addEventListener('click', () => {
+      openModal(el.mobileCertModal);
+    });
+  }
+
+  if (el.btnOpenMobileCertGuide) {
+    el.btnOpenMobileCertGuide.addEventListener('click', () => {
+      closeModal(el.httpsRequiredModal);
+      openModal(el.mobileCertModal);
+    });
+  }
 
   document.querySelectorAll('[data-copy-target]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -3960,26 +4019,38 @@
   setupGridDragAndDrop(el.screensGrid);
 
   // --- Screen Sharing Trigger ---
-  async function triggerStartScreenShare(post) {
-    if (!screenManager.isSecureContextAvailable()) {
+  async function triggerStartScreenShare(post, options = {}) {
+    if (!screenManager.isSecureContext()) {
       openModal(el.httpsRequiredModal);
       return false;
     }
+
+    const streamSource = options.streamSource || (isMobileDevice ? 'camera' : 'screen');
+    const facingMode = options.facingMode || el.cameraFacingSelect?.value || 'environment';
 
     try {
       await screenManager.startSharing(post.id, {
         authorId,
         authorName: authorName || post.author,
+        streamSource,
+        facingMode,
       });
-      showToast('Compartiendo tu pantalla en tiempo real', 'success');
+      showToast(
+        streamSource === 'camera'
+          ? '📷 Transmitiendo cámara / cuaderno en vivo'
+          : '🖥️ Compartiendo tu pantalla en tiempo real',
+        'success'
+      );
       return true;
     } catch (err) {
       if (err.code === 'HTTPS_REQUIRED') {
         openModal(el.httpsRequiredModal);
+      } else if (err.code === 'SCREEN_CAPTURE_UNSUPPORTED') {
+        showToast('Captura de pantalla no soportada en este navegador móvil. Usa "Cámara / Cuaderno" para transmitir.', 'warning');
       } else if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
-        showToast('Captura de pantalla cancelada');
+        showToast('Transmisión cancelada');
       } else {
-        showToast(err.message || 'No se pudo compartir la pantalla', 'error');
+        showToast(err.message || 'No se pudo iniciar la transmisión', 'error');
       }
       return false;
     }
@@ -3995,6 +4066,19 @@
     el.screenReasonInput.value = '';
     el.screenModalError.textContent = '';
     el.screenModalError.classList.add('hidden');
+
+    if (isMobileDevice) {
+      if (el.screenSourceSelectorGroup) el.screenSourceSelectorGroup.classList.remove('hidden');
+      if (el.btnUploadScreenCapture) el.btnUploadScreenCapture.classList.remove('hidden');
+      if (el.screenShareModalTitle) el.screenShareModalTitle.textContent = '📱 Transmitir en Vivo / Cuaderno';
+      if (el.btnStartScreenDirect) el.btnStartScreenDirect.innerHTML = '🔴 Transmitir ahora';
+    } else {
+      if (el.screenSourceSelectorGroup) el.screenSourceSelectorGroup.classList.add('hidden');
+      if (el.btnUploadScreenCapture) el.btnUploadScreenCapture.classList.add('hidden');
+      if (el.screenShareModalTitle) el.screenShareModalTitle.textContent = '🖥️ Compartir pantalla';
+      if (el.btnStartScreenDirect) el.btnStartScreenDirect.innerHTML = '🖥️ Compartir ahora';
+    }
+
     openModal(el.screenShareModal);
     if (!authorName) {
       el.screenAuthorInput.focus();
@@ -4003,18 +4087,46 @@
     }
   }
 
+  // Handle mobile screen source selector (Camera vs Screen)
+  if (el.optSourceCamera && el.optSourceScreen) {
+    el.optSourceCamera.addEventListener('click', () => {
+      el.optSourceCamera.classList.add('active');
+      el.optSourceScreen.classList.remove('active');
+      const radio = el.optSourceCamera.querySelector('input');
+      if (radio) radio.checked = true;
+      if (el.cameraFacingRow) el.cameraFacingRow.classList.remove('hidden');
+    });
+    el.optSourceScreen.addEventListener('click', () => {
+      el.optSourceScreen.classList.add('active');
+      el.optSourceCamera.classList.remove('active');
+      const radio = el.optSourceScreen.querySelector('input');
+      if (radio) radio.checked = true;
+      if (el.cameraFacingRow) el.cameraFacingRow.classList.add('hidden');
+    });
+  }
+
+  if (el.btnUploadScreenCapture) {
+    el.btnUploadScreenCapture.addEventListener('click', () => {
+      closeModal(el.screenShareModal);
+      openComposerForCreate();
+      showToast('📸 Selecciona una foto de tu cuaderno o captura de pantalla', 'info');
+    });
+  }
+
   function showScreenModalError(msg) {
     el.screenModalError.textContent = msg;
     el.screenModalError.classList.remove('hidden');
   }
 
-  async function createScreenCardAndShare({ author, reason }) {
-    if (!screenManager.isSecureContextAvailable()) {
+  async function createScreenCardAndShare({ author, reason, streamSource = 'screen', facingMode = 'environment' }) {
+    if (!screenManager.isSecureContext()) {
       openModal(el.httpsRequiredModal);
       return false;
     }
 
     setAuthorName(author);
+    const isCamera = streamSource === 'camera';
+    const displayTopic = isCamera ? `[Cámara] ${reason}` : reason;
 
     const ack = await new Promise((resolve) => {
       socket.emit(
@@ -4024,7 +4136,7 @@
           kind: 'screen',
           authorId,
           author,
-          topic: reason,
+          topic: displayTopic,
           content: '',
           color: 'default',
         },
@@ -4040,7 +4152,7 @@
       applyWorkspaceView('screens');
     }
 
-    return triggerStartScreenShare(ack.post);
+    return triggerStartScreenShare(ack.post, { streamSource, facingMode });
   }
 
   el.btnJoinScreenQueue.addEventListener('click', () => {
@@ -4097,18 +4209,25 @@
       return;
     }
 
-    if (!screenManager.isSecureContextAvailable()) {
+    if (!screenManager.isSecureContext()) {
       closeModal(el.screenShareModal);
       openModal(el.httpsRequiredModal);
       return;
     }
 
+    let streamSource = 'screen';
+    if (isMobileDevice) {
+      const selectedRadio = el.screenShareForm.querySelector('input[name="screenSourceChoice"]:checked');
+      if (selectedRadio) streamSource = selectedRadio.value;
+    }
+    const facingMode = el.cameraFacingSelect ? el.cameraFacingSelect.value : 'environment';
+
     el.btnStartScreenDirect.disabled = true;
     try {
       closeModal(el.screenShareModal);
-      await createScreenCardAndShare({ author, reason });
+      await createScreenCardAndShare({ author, reason, streamSource, facingMode });
     } catch (err) {
-      showToast(err.message || 'No se pudo compartir la pantalla', 'error');
+      showToast(err.message || 'No se pudo iniciar la transmisión', 'error');
     } finally {
       el.btnStartScreenDirect.disabled = false;
     }

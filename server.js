@@ -226,6 +226,11 @@ app.get('/cert/PadletLocal-RootCA.crt', (_req, res) => {
 });
 
 app.get('/cert/Instalar-Certificado-Windows.bat', (req, res) => {
+  const ua = String(req.headers['user-agent'] || '');
+  if (/android|iphone|ipad|ipod|mobile/i.test(ua)) {
+    return res.redirect('/cert/movil');
+  }
+
   const hostHeader = String(req.headers.host || '').split(':')[0];
   const host = /^[a-zA-Z0-9.-]+$/.test(hostHeader) ? hostHeader : getPrimaryLocalIP();
   const certUrl = `http://${host}:${HTTP_PORT}/cert/PadletLocal-RootCA.crt`;
@@ -262,6 +267,215 @@ app.get('/cert/Instalar-Certificado-Windows.bat', (req, res) => {
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('Content-Disposition', 'attachment; filename="Instalar-Certificado-Windows.bat"');
   return res.send(batContent);
+});
+
+app.get('/cert/movil', (req, res) => {
+  const hostHeader = String(req.headers.host || '').split(':')[0];
+  const host = /^[a-zA-Z0-9.-]+$/.test(hostHeader) ? hostHeader : getPrimaryLocalIP();
+  const certUrl = `http://${host}:${HTTP_PORT}/cert/PadletLocal-RootCA.crt`;
+  const appUrl = `https://${host}:${HTTPS_PORT}`;
+  const ua = String(req.headers['user-agent'] || '');
+  const isAndroid = /android/i.test(ua);
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+  const platformLabel = isAndroid ? 'Android' : isIOS ? 'iPhone / iPad (iOS)' : 'Dispositivo Móvil';
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PadletLocal - Acceso Celulares y Certificado</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      padding: 20px 0 16px;
+    }
+    .header h1 {
+      font-size: 1.5rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(79, 70, 229, 0.25);
+      color: #a5b4fc;
+      border: 1px solid rgba(79, 70, 229, 0.4);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-top: 6px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .desc {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .steps-box {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 14px;
+    }
+    .steps-box p {
+      margin-bottom: 8px;
+    }
+    .steps-box p:last-child {
+      margin-bottom: 0;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+    .btn-secondary {
+      background: #334155;
+      color: #f1f5f9;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid var(--border);
+      margin-top: 10px;
+    }
+    ol {
+      margin-left: 20px;
+      margin-top: 6px;
+    }
+    li {
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📱 PadletLocal</h1>
+      <span class="badge">Detectado: ${platformLabel}</span>
+    </div>
+
+    <!-- Opcion 1: Acceso rapido -->
+    <div class="card">
+      <div class="card-title">⚡ Opción Rápida (Recomendada)</div>
+      <p class="desc">Entra a la versión segura en 2 toques sin necesidad de instalar archivos:</p>
+      
+      <div class="steps-box">
+        ${isIOS ? `
+        <p><strong>En iPhone / iPad (Safari):</strong></p>
+        <ol>
+          <li>Toca el botón azul <strong>"Abrir en HTTPS"</strong> abajo.</li>
+          <li>En la pantalla de aviso, toca <strong>"Mostrar detalles"</strong>.</li>
+          <li>Toca en <strong>"visitar este sitio web"</strong> y confirma.</li>
+        </ol>
+        ` : `
+        <p><strong>En Android (Chrome / Brave / Edge):</strong></p>
+        <ol>
+          <li>Toca el botón azul <strong>"Abrir en HTTPS"</strong> abajo.</li>
+          <li>Toca en <strong>"Configuración avanzada"</strong>.</li>
+          <li>Toca en <strong>"Acceder a este sitio (no seguro)"</strong>.</li>
+        </ol>
+        `}
+      </div>
+
+      <a href="${appUrl}" class="btn btn-primary">🚀 Abrir PadletLocal en HTTPS</a>
+    </div>
+
+    <!-- Opcion 2: Descargar Certificado CA -->
+    <div class="card">
+      <div class="card-title">🔒 Opción Certificado CA (.crt)</div>
+      <p class="desc">Para agregar el certificado de autoridad local a tu teléfono y tener candado seguro:</p>
+      
+      <a href="${certUrl}" class="btn btn-secondary" download>📥 Descargar Certificado (.crt)</a>
+
+      <div class="steps-box" style="margin-top:12px;">
+        ${isIOS ? `
+        <p><strong>Instalación en iPhone / iPad:</strong></p>
+        <ol>
+          <li>Descarga el archivo <code>.crt</code> en Safari y permite el perfil.</li>
+          <li>Abre <em>Ajustes</em> → <em>Perfil descargado</em> → <em>Instalar</em>.</li>
+          <li>Abre <em>Ajustes</em> → <em>General</em> → <em>Información</em> → <em>Ajustes de confianza de certificados</em> (abajo) → Activa <strong>PadletLocal Root CA</strong>.</li>
+        </ol>
+        ` : `
+        <p><strong>Instalación en Android:</strong></p>
+        <ol>
+          <li>Descarga el archivo <code>.crt</code> arriba.</li>
+          <li>Abre <em>Ajustes</em> de tu celular → <em>Seguridad</em> (o <em>Cifrado y credenciales</em>).</li>
+          <li>Selecciona <em>Instalar certificado</em> → <em>Certificado de CA</em>.</li>
+          <li>Toca <em>"Instalar de todos modos"</em> y elige el archivo descargado.</li>
+        </ol>
+        `}
+      </div>
+    </div>
+
+    <a href="http://${host}:${HTTP_PORT}" class="btn btn-ghost">⬅ Volver a PadletLocal</a>
+  </div>
+</body>
+</html>`;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.send(html);
 });
 
 const PKG_INFO = {
