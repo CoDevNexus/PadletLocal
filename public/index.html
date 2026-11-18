@@ -452,6 +452,17 @@
 
       <!-- TAB 1: Siguiente Tarea -->
       <div class="modal-body teacher-tab-pane" data-teacher-pane="assignment">
+        <div class="assignment-mode-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="assignmentModeBadge" class="assignment-badge" style="background:#4f46e5;color:#fff;">📝 Nueva Tarea</span>
+            <span id="assignmentModeHint" style="font-size:0.8rem;color:var(--text-subtle);">Formulario limpio para redactar una nueva consigna</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button type="button" id="btnNewAssignment" class="btn btn-sm btn-secondary" title="Limpiar formulario para crear una nueva tarea sin imágenes anteriores">＋ Nueva tarea (limpio)</button>
+            <button type="button" id="btnLoadActiveAssignment" class="btn btn-sm btn-ghost hidden" title="Cargar la tarea activa actualmente para editarla">✏️ Cargar tarea actual</button>
+          </div>
+        </div>
+
         <form id="assignmentForm" class="stack-form">
           <div class="form-row-2">
             <div class="form-group">
@@ -494,8 +505,11 @@
             </label>
           </div>
 
-          <div class="modal-footer">
-            <button type="button" id="btnClearAssignment" class="btn btn-ghost">Quitar tarea actual</button>
+          <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;gap:8px;">
+              <button type="button" id="btnResetTaskForm" class="btn btn-sm btn-ghost" title="Limpiar todos los campos y la imagen para redactar de cero">🧹 Limpiar campos</button>
+              <button type="button" id="btnClearAssignment" class="btn btn-sm btn-ghost" title="Archivar la tarea activa del panel">Quitar tarea del panel</button>
+            </div>
             <button type="submit" id="btnSaveAssignment" class="btn btn-primary">Publicar tarea</button>
           </div>
         </form>

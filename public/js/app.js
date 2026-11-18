@@ -232,6 +232,8 @@
     taskExistingImageUrl: null,
     taskExistingImageName: null,
     taskRemoveExistingImage: false,
+    isEditingActiveAssignment: false,
+    pendingEditActive: false,
   };
 
   function serverNow() {
@@ -387,6 +389,11 @@
     taskNotifyCheck: document.getElementById('taskNotifyCheck'),
     btnClearAssignment: document.getElementById('btnClearAssignment'),
     btnSaveAssignment: document.getElementById('btnSaveAssignment'),
+    assignmentModeBadge: document.getElementById('assignmentModeBadge'),
+    assignmentModeHint: document.getElementById('assignmentModeHint'),
+    btnNewAssignment: document.getElementById('btnNewAssignment'),
+    btnLoadActiveAssignment: document.getElementById('btnLoadActiveAssignment'),
+    btnResetTaskForm: document.getElementById('btnResetTaskForm'),
     assignmentHistoryBox: document.getElementById('assignmentHistoryBox'),
     assignmentHistoryList: document.getElementById('assignmentHistoryList'),
 
@@ -655,13 +662,60 @@
     if (tabName === 'quizzes' && window.PadletQuiz) {
       window.PadletQuiz.loadTeacherQuizzes();
     }
+    if (tabName === 'assignment') {
+      updateAssignmentFormHeaderUI();
+    }
   }
 
   document.querySelectorAll('.teacher-tab').forEach((btn) => {
     btn.addEventListener('click', () => switchTeacherTab(btn.dataset.teacherTab));
   });
 
-  function populateAssignmentForm(assignment) {
+  function updateAssignmentFormHeaderUI() {
+    if (!el.assignmentModeBadge) return;
+    const hasActive = Boolean(state.assignment);
+    if (el.btnLoadActiveAssignment) {
+      el.btnLoadActiveAssignment.classList.toggle('hidden', !hasActive || state.isEditingActiveAssignment);
+    }
+    if (state.isEditingActiveAssignment && state.assignment) {
+      el.assignmentModeBadge.textContent = '✏️ Editando Tarea Activa';
+      el.assignmentModeBadge.style.background = '#f59e0b';
+      if (el.assignmentModeHint) {
+        el.assignmentModeHint.textContent = 'Modificando la consigna actual fijada en el panel';
+      }
+      if (el.btnSaveAssignment) {
+        el.btnSaveAssignment.textContent = 'Guardar cambios de tarea';
+      }
+    } else {
+      el.assignmentModeBadge.textContent = '📝 Nueva Tarea';
+      el.assignmentModeBadge.style.background = '#4f46e5';
+      if (el.assignmentModeHint) {
+        el.assignmentModeHint.textContent = 'Formulario limpio para publicar una nueva tarea';
+      }
+      if (el.btnSaveAssignment) {
+        el.btnSaveAssignment.textContent = 'Publicar tarea';
+      }
+    }
+  }
+
+  function resetAssignmentFormToNew() {
+    state.isEditingActiveAssignment = false;
+    el.taskTitleInput.value = '';
+    el.taskDueInput.value = '';
+    el.taskInstructionsInput.value = '';
+    el.taskPinnedCheck.checked = true;
+    el.taskNotifyCheck.checked = true;
+    state.taskSelectedFile = null;
+    state.taskExistingImageUrl = null;
+    state.taskExistingImageName = null;
+    state.taskRemoveExistingImage = false;
+    if (el.taskImageInput) el.taskImageInput.value = '';
+    showTaskImagePreview(null);
+    updateAssignmentFormHeaderUI();
+  }
+
+  function populateAssignmentForm(assignment, { isEditingActive = false } = {}) {
+    state.isEditingActiveAssignment = Boolean(isEditingActive);
     el.taskTitleInput.value = assignment?.title || '';
     el.taskDueInput.value = assignment?.dueNote || '';
     el.taskInstructionsInput.value = assignment?.instructions || '';
@@ -670,20 +724,26 @@
     state.taskExistingImageUrl = assignment?.imageUrl || null;
     state.taskExistingImageName = assignment?.imageName || null;
     state.taskRemoveExistingImage = false;
-    el.taskImageInput.value = '';
+    if (el.taskImageInput) el.taskImageInput.value = '';
     showTaskImagePreview(assignment?.imageUrl || null);
+    updateAssignmentFormHeaderUI();
   }
 
-  function openTeacherPanel(tab = 'assignment') {
+  function openTeacherPanel(tab = 'assignment', { editActive = false } = {}) {
     if (!state.isTeacher) {
       state.pendingTeacherTab = tab;
+      state.pendingEditActive = editActive;
       el.inputTeacherPin.value = '';
       el.teacherLoginError.classList.add('hidden');
       openModal(el.teacherLoginModal);
       el.inputTeacherPin.focus();
       return;
     }
-    populateAssignmentForm(state.assignment);
+    if (editActive && state.assignment) {
+      populateAssignmentForm(state.assignment, { isEditingActive: true });
+    } else {
+      resetAssignmentFormToNew();
+    }
     renderAssignmentHistory();
     renderScheduledTimersUI();
     renderSessionsUI();
@@ -692,8 +752,12 @@
     openModal(el.teacherPanelModal);
   }
 
-  el.btnTeacherMode.addEventListener('click', () => openTeacherPanel(state.activeTeacherTab || 'assignment'));
-  el.btnEditAssignmentInline.addEventListener('click', () => openTeacherPanel('assignment'));
+  el.btnTeacherMode.addEventListener('click', () =>
+    openTeacherPanel(state.activeTeacherTab || 'assignment', { editActive: false })
+  );
+  el.btnEditAssignmentInline.addEventListener('click', () =>
+    openTeacherPanel('assignment', { editActive: true })
+  );
 
   el.teacherLoginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -723,8 +787,10 @@
       updateTeacherUI();
       showToast('Modo Profesor activado', 'success');
       const targetTab = state.pendingTeacherTab || 'assignment';
+      const targetEditActive = Boolean(state.pendingEditActive);
       state.pendingTeacherTab = null;
-      openTeacherPanel(targetTab);
+      state.pendingEditActive = false;
+      openTeacherPanel(targetTab, { editActive: targetEditActive });
     } catch {
       el.teacherLoginError.textContent = 'No se pudo verificar el PIN.';
       el.teacherLoginError.classList.remove('hidden');
@@ -916,10 +982,38 @@
   el.btnRemoveTaskImage.addEventListener('click', (e) => {
     e.stopPropagation();
     state.taskSelectedFile = null;
-    if (state.taskExistingImageUrl) state.taskRemoveExistingImage = true;
-    el.taskImageInput.value = '';
+    state.taskRemoveExistingImage = true;
+    state.taskExistingImageUrl = null;
+    state.taskExistingImageName = null;
+    if (el.taskImageInput) el.taskImageInput.value = '';
     showTaskImagePreview(null);
+    showToast('Imagen quitada de la tarea');
   });
+
+  if (el.btnNewAssignment) {
+    el.btnNewAssignment.addEventListener('click', () => {
+      resetAssignmentFormToNew();
+      showToast('Formulario limpio para redactar una nueva tarea');
+      el.taskTitleInput.focus();
+    });
+  }
+
+  if (el.btnResetTaskForm) {
+    el.btnResetTaskForm.addEventListener('click', () => {
+      resetAssignmentFormToNew();
+      showToast('Formulario e imagen limpiados');
+      el.taskTitleInput.focus();
+    });
+  }
+
+  if (el.btnLoadActiveAssignment) {
+    el.btnLoadActiveAssignment.addEventListener('click', () => {
+      if (state.assignment) {
+        populateAssignmentForm(state.assignment, { isEditingActive: true });
+        showToast('Tarea activa cargada para edición');
+      }
+    });
+  }
 
   function renderAssignmentHistory() {
     const list = state.assignmentHistory || [];
@@ -948,8 +1042,8 @@
     if (!btn) return;
     const item = state.assignmentHistory[Number(btn.dataset.loadHistory)];
     if (item) {
-      populateAssignmentForm(item);
-      showToast('Tarea cargada en el formulario');
+      populateAssignmentForm(item, { isEditingActive: false });
+      showToast('Tarea anterior cargada en el formulario');
     }
   });
 
@@ -1002,6 +1096,7 @@
 
       if (!ack?.ok) throw new Error(ack?.error || 'No se pudo publicar la tarea.');
       state.expandedTaskId = null;
+      resetAssignmentFormToNew();
       closeModal(el.teacherPanelModal);
       showToast('Siguiente tarea publicada para todos', 'success');
     } catch (err) {
@@ -1015,7 +1110,7 @@
     if (!state.assignment) return;
     socket.emit('teacher:assignment:clear', { teacherToken: state.teacherToken }, (ack) => {
       if (ack?.ok) {
-        populateAssignmentForm(null);
+        resetAssignmentFormToNew();
         showToast('Tarea actual archivada y ocultada');
       } else {
         showToast(ack?.error || 'Error al quitar tarea', 'error');
@@ -2102,6 +2197,7 @@
       state.openComments.clear();
       state.unreadNotifications = 0;
       updateNotifBadge();
+      resetAssignmentFormToNew();
     }
 
     state.activeSessionId = data.sessionId !== undefined ? data.sessionId : data.activeSessionId || null;
