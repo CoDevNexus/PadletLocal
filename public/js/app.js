@@ -169,6 +169,7 @@
   // --- Persistent Client Identity ---
   const STORAGE_ID_KEY = 'padletlocal_author_id';
   const STORAGE_NAME_KEY = 'padletlocal_author_name';
+  const STORAGE_ROLE_KEY = 'padletlocal_user_role';
   const STORAGE_SOUND_KEY = 'padletlocal_sound_enabled';
   const STORAGE_TEACHER_TOKEN_KEY = 'padletlocal_teacher_token';
   const STORAGE_TEACHER_NAME_KEY = 'padletlocal_teacher_name';
@@ -192,6 +193,12 @@
     sessionStatus: { isPublished: true, isClosed: false },
     hasChosenSession: false,
     sessions: [],
+    chatMessages: [],
+    chatUsers: [],
+    unreadChatCount: 0,
+    isChatOpen: false,
+    activeChatTab: 'messages',
+    activeRecipient: 'all',
     board: {
       title: 'PadletLocal',
       description: 'Panel colaborativo en red local — ideas, imágenes y pantalla compartida en tiempo real.',
@@ -298,6 +305,8 @@
     menuItemStudentHelp: document.getElementById('menuItemStudentHelp'),
     menuItemStudentSound: document.getElementById('menuItemStudentSound'),
     menuItemStudentUiMode: document.getElementById('menuItemStudentUiMode'),
+    menuItemStudentChat: document.getElementById('menuItemStudentChat'),
+    menuItemStudentSwitchRole: document.getElementById('menuItemStudentSwitchRole'),
     menuItemStudentDev: document.getElementById('menuItemStudentDev'),
     menuItemTeacherLogin: document.getElementById('menuItemTeacherLogin'),
 
@@ -310,6 +319,8 @@
     menuItemTeacherScreens: document.getElementById('menuItemTeacherScreens'),
     menuItemTeacherPost: document.getElementById('menuItemTeacherPost'),
     menuItemTeacherCleanBoard: document.getElementById('menuItemTeacherCleanBoard'),
+    menuItemTeacherChat: document.getElementById('menuItemTeacherChat'),
+    menuItemTeacherSwitchRole: document.getElementById('menuItemTeacherSwitchRole'),
     menuItemTeacherSettings: document.getElementById('menuItemTeacherSettings'),
     menuItemTeacherNetwork: document.getElementById('menuItemTeacherNetwork'),
     menuItemTeacherDev: document.getElementById('menuItemTeacherDev'),
@@ -326,6 +337,44 @@
 
     // Teacher Login input for teacher name
     inputTeacherName: document.getElementById('inputTeacherName'),
+
+    // Topbar Chat Button & Badge
+    btnOpenChat: document.getElementById('btnOpenChat'),
+    chatUnreadBadge: document.getElementById('chatUnreadBadge'),
+
+    // Live Session Chat Drawer Elements
+    chatDrawerBackdrop: document.getElementById('chatDrawerBackdrop'),
+    chatDrawer: document.getElementById('chatDrawer'),
+    chatSessionBadge: document.getElementById('chatSessionBadge'),
+    chatPresenceInfo: document.getElementById('chatPresenceInfo'),
+    btnClearChat: document.getElementById('btnClearChat'),
+    btnCloseChat: document.getElementById('btnCloseChat'),
+    tabChatMessages: document.getElementById('tabChatMessages'),
+    tabChatUsers: document.getElementById('tabChatUsers'),
+    chatOnlineUsersCount: document.getElementById('chatOnlineUsersCount'),
+    chatMessagesPane: document.getElementById('chatMessagesPane'),
+    chatRecipientSelect: document.getElementById('chatRecipientSelect'),
+    chatPrivacyNote: document.getElementById('chatPrivacyNote'),
+    chatMessagesList: document.getElementById('chatMessagesList'),
+    chatForm: document.getElementById('chatForm'),
+    chatInputText: document.getElementById('chatInputText'),
+    btnSendChat: document.getElementById('btnSendChat'),
+    chatUsersPane: document.getElementById('chatUsersPane'),
+    chatUsersList: document.getElementById('chatUsersList'),
+
+    // Modal: Welcome & Role Selection
+    welcomeRoleModal: document.getElementById('welcomeRoleModal'),
+    btnCloseWelcomeModal: document.getElementById('btnCloseWelcomeModal'),
+    welcomeStudentForm: document.getElementById('welcomeStudentForm'),
+    welcomeStudentName: document.getElementById('welcomeStudentName'),
+    welcomeStudentSessionSelect: document.getElementById('welcomeStudentSessionSelect'),
+    btnEnterAsStudent: document.getElementById('btnEnterAsStudent'),
+    welcomeTeacherForm: document.getElementById('welcomeTeacherForm'),
+    welcomeTeacherName: document.getElementById('welcomeTeacherName'),
+    welcomeTeacherPin: document.getElementById('welcomeTeacherPin'),
+    welcomeTeacherError: document.getElementById('welcomeTeacherError'),
+    btnEnterAsTeacher: document.getElementById('btnEnterAsTeacher'),
+    btnWelcomeAboutDev: document.getElementById('btnWelcomeAboutDev'),
 
     btnNetworkInfo: document.getElementById('btnNetworkInfo'),
     btnOpenScreenModal: document.getElementById('btnOpenScreenModal'),
@@ -478,6 +527,7 @@
     newSessionNameInput: document.getElementById('newSessionNameInput'),
     newSessionDescInput: document.getElementById('newSessionDescInput'),
     newSessionPublishCheck: document.getElementById('newSessionPublishCheck'),
+    newSessionHideStudentsCheck: document.getElementById('newSessionHideStudentsCheck'),
     newSessionActivateCheck: document.getElementById('newSessionActivateCheck'),
     btnCreateSession: document.getElementById('btnCreateSession'),
     sessionsCountNum: document.getElementById('sessionsCountNum'),
@@ -585,6 +635,9 @@
         if (!state.activeSessionId) return;
         state.hasChosenSession = true;
       }
+      if (target === el.welcomeRoleModal) {
+        if (!sessionStorage.getItem(STORAGE_ROLE_KEY) && !state.hasChosenSession) return;
+      }
       closeModal(target);
     });
   });
@@ -595,6 +648,9 @@
         if (backdrop === el.sessionPickerModal) {
           if (!state.activeSessionId) return;
           state.hasChosenSession = true;
+        }
+        if (backdrop === el.welcomeRoleModal) {
+          if (!sessionStorage.getItem(STORAGE_ROLE_KEY) && !state.hasChosenSession) return;
         }
         closeModal(backdrop);
       }
@@ -736,7 +792,12 @@
         sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
       }
       if (socket && socket.connected) {
-        socket.emit('client:register', { authorId, teacherToken: state.teacherToken });
+        socket.emit('client:register', {
+          authorId,
+          authorName: state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno'),
+          teacherToken: state.teacherToken,
+          teacherName: state.teacherName,
+        });
       }
       updateTeacherUI();
     } catch {}
@@ -2007,7 +2068,12 @@
   socket.on('connect', () => {
     state.socketId = socket.id;
     el.connectionDot.classList.remove('offline');
-    socket.emit('client:register', { authorId, teacherToken: state.teacherToken });
+    socket.emit('client:register', {
+      authorId,
+      authorName: state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno'),
+      teacherToken: state.teacherToken,
+      teacherName: state.teacherName,
+    });
   });
 
   socket.on('disconnect', () => {
@@ -2383,6 +2449,7 @@
         const isCurrent = s.id === state.activeSessionId;
         const isPub = s.isPublished !== false;
         const isClosed = Boolean(s.isClosed);
+        const isHiddenStudents = Boolean(s.hideFromStudents);
         return `
           <div class="session-item ${isCurrent ? 'is-active' : ''} ${!isPub ? 'is-unpublished' : ''}" data-session-id="${escapeHtml(s.id)}">
             <div class="session-item-info">
@@ -2391,6 +2458,7 @@
                 ${isCurrent ? '<span class="session-active-tag">Actual</span>' : ''}
                 ${isPub ? '<span class="session-tag-pub">Habilitada</span>' : '<span class="session-tag-unpub">Despublicada</span>'}
                 ${isClosed ? '<span class="session-tag-closed">Cerrada</span>' : ''}
+                ${isHiddenStudents ? '<span class="session-tag-hidden">🚫 Sin acceso alumnos</span>' : ''}
               </div>
               <div class="session-item-meta">
                 ${s.padletCount} ${s.padletCount === 1 ? 'Padlet' : 'Padlets'}
@@ -2409,6 +2477,9 @@
               <button type="button" class="btn btn-sm btn-secondary" data-session-action="toggle-publish" title="${
                 isPub ? 'Despublicar (ocultar para los alumnos)' : 'Publicar / habilitar para los alumnos'
               }">${isPub ? '👁️‍🗨️ Despublicar' : '📢 Publicar'}</button>
+              <button type="button" class="btn btn-sm btn-secondary" data-session-action="toggle-hide-students" title="${
+                isHiddenStudents ? 'Permitir acceso a los alumnos' : 'Ocultar y bloquear completamente para alumnos'
+              }">${isHiddenStudents ? '👁️ Permitir Alumnos' : '🚫 Ocultar Alumnos'}</button>
               <button type="button" class="btn btn-sm btn-secondary" data-session-action="toggle-close" title="${
                 isClosed ? 'Volver a abrir para recibir respuestas' : 'Cerrar sesión (solo lectura para alumnos)'
               }">${isClosed ? '🔓 Abrir' : '🔒 Cerrar'}</button>
@@ -2430,6 +2501,7 @@
     const name = el.newSessionNameInput.value.trim();
     const description = el.newSessionDescInput.value.trim();
     const isPublished = el.newSessionPublishCheck.checked;
+    const hideFromStudents = Boolean(el.newSessionHideStudentsCheck?.checked);
     const activate = el.newSessionActivateCheck.checked;
     if (!name) {
       showToast('Escribe un nombre para la nueva sesión de clase', 'error');
@@ -2439,7 +2511,7 @@
     el.btnCreateSession.disabled = true;
     socket.emit(
       'teacher:session:create',
-      { teacherToken: state.teacherToken, name, description, isPublished, activate },
+      { teacherToken: state.teacherToken, name, description, isPublished, hideFromStudents, activate },
       (ack) => {
         el.btnCreateSession.disabled = false;
         if (!ack?.ok) {
@@ -2448,11 +2520,14 @@
         }
         el.newSessionNameInput.value = '';
         el.newSessionDescInput.value = '';
+        if (el.newSessionHideStudentsCheck) el.newSessionHideStudentsCheck.checked = false;
         if (activate) {
           state.hasChosenSession = true;
           closeModal(el.teacherPanelModal);
           showToast(
-            isPublished
+            hideFromStudents
+              ? `Nueva sesión privada sin acceso para alumnos: "${name}"`
+              : isPublished
               ? `Nueva sesión habilitada: "${name}"`
               : `Nueva sesión privada (despublicada): "${name}"`,
             'success'
@@ -2498,6 +2573,24 @@
         (ack) => {
           if (!ack?.ok) showToast(ack?.error || 'No se pudo actualizar', 'error');
           else showToast(nextPub ? '📢 Sesión publicada y habilitada' : '👁️‍🗨️ Sesión despublicada (oculta para alumnos)', 'success');
+        }
+      );
+    } else if (action === 'toggle-hide-students') {
+      const nextHide = !Boolean(session?.hideFromStudents);
+      if (
+        nextHide &&
+        !window.confirm(
+          `¿Ocultar la sesión "${session?.name || ''}" a todos los alumnos?\n\nDejará de aparecer en la lista de alumnos y ningún alumno podrá entrar. Solo los profesores con Clave Maestra podrán ingresar.`
+        )
+      ) {
+        return;
+      }
+      socket.emit(
+        'teacher:session:set-status',
+        { teacherToken: state.teacherToken, sessionId, hideFromStudents: nextHide },
+        (ack) => {
+          if (!ack?.ok) showToast(ack?.error || 'No se pudo actualizar', 'error');
+          else showToast(nextHide ? '🚫 Sesión oculta y sin acceso a alumnos' : '👁️ Sesión visible y disponible para alumnos', 'success');
         }
       );
     } else if (action === 'toggle-close') {
@@ -2608,6 +2701,14 @@
     renderBoardFull();
     renderScreensGrid();
     applyWorkspaceView(state.workspaceView);
+    if (el.chatSessionBadge) {
+      el.chatSessionBadge.textContent = state.board?.title || 'Clase';
+    }
+    if (state.isChatOpen) {
+      socket.emit('chat:history', { sessionId: state.activeSessionId }, (res) => {
+        if (res?.ok && Array.isArray(res.messages)) renderChatMessages(res.messages);
+      });
+    }
     if (window.PadletQuiz) {
       window.PadletQuiz.onSessionSnapshot(data);
     }
@@ -2621,8 +2722,11 @@
 
   socket.on('board:init', (data) => {
     applySessionSnapshot(data, { isSessionChange: false });
-    // Let user or teacher pick which session to work in upon entering
-    if (!state.hasChosenSession) {
+    // Let user or teacher pick role on initial entry if not chosen yet
+    const chosenRole = sessionStorage.getItem(STORAGE_ROLE_KEY);
+    if (!chosenRole) {
+      openWelcomeModal({ dismissible: false });
+    } else if (!state.hasChosenSession) {
       openSessionPicker({ required: !state.activeSessionId });
     }
   });
@@ -2672,6 +2776,7 @@
     renderSessionStatusBanner();
     renderSessionsUI();
     renderSessionPickerList();
+    updateWelcomeSessionsDropdown();
   });
 
   socket.on('screen-queue:updated', ({ queue }) => {
@@ -3172,6 +3277,8 @@
     const isOpen = state.openComments.has(post.id);
     if (!isOpen) return '';
     const comments = Array.isArray(post.comments) ? post.comments : [];
+    const isClosed = Boolean(state.sessionStatus?.isClosed);
+    const canComment = state.isTeacher || !isClosed;
     const listHtml =
       comments.length === 0
         ? `<div class="muted-note" style="font-size:0.78rem;">Aún no hay comentarios. ¡Sé el primero!</div>`
@@ -3189,20 +3296,27 @@
             )
             .join('');
 
-    return `
-      <div class="card-comments">
-        <div class="comments-list">${listHtml}</div>
+    const formHtml = canComment
+      ? `
         <form class="comment-form" data-action="submit-comment">
           <input type="text" name="commentText" maxlength="500" placeholder="Escribe un comentario..." autocomplete="off" required />
           <button type="submit" class="btn btn-sm btn-primary">Enviar</button>
         </form>
+      `
+      : `<div class="muted-note" style="font-size:0.76rem;padding:6px 0;">🔒 Sesión cerrada en modo solo lectura. Comentarios deshabilitados.</div>`;
+
+    return `
+      <div class="card-comments">
+        <div class="comments-list">${listHtml}</div>
+        ${formHtml}
       </div>
     `;
   }
 
   function buildCardInnerParts(post) {
+    const isClosed = Boolean(state.sessionStatus?.isClosed);
     const isOwner = post.authorId === authorId;
-    const canManage = isOwner || state.isTeacher;
+    const canManage = state.isTeacher || (isOwner && !isClosed);
     const isLive = Boolean(post.screenShare?.active);
     const isPresenter = screenManager.isPresenting(post.id) || (isLive && post.screenShare.sharerSocketId === socket.id);
     const likes = Array.isArray(post.likes) ? post.likes : [];
@@ -3873,6 +3987,10 @@
 
   // --- Simple Screen Share / Queue Modal (ONLY Name & Reason) ---
   function openScreenShareModal() {
+    if (state.sessionStatus?.isClosed && !state.isTeacher) {
+      showToast('🔒 Esta sesión está cerrada por el profesor (solo lectura).', 'error');
+      return;
+    }
     el.screenAuthorInput.value = authorName;
     el.screenReasonInput.value = '';
     el.screenModalError.textContent = '';
@@ -4016,6 +4134,10 @@
   }
 
   function openComposerForCreate() {
+    if (state.sessionStatus?.isClosed && !state.isTeacher) {
+      showToast('🔒 Esta sesión está cerrada por el profesor (solo lectura).', 'error');
+      return;
+    }
     resetComposer();
     openModal(el.composerModal);
     if (!authorName) {
@@ -4026,6 +4148,10 @@
   }
 
   function openComposerForEdit(post) {
+    if (state.sessionStatus?.isClosed && !state.isTeacher) {
+      showToast('🔒 Esta sesión está cerrada por el profesor (solo lectura).', 'error');
+      return;
+    }
     resetComposer();
     el.editPostId.value = post.id;
     el.composerTitle.textContent = isScreenPost(post) ? 'Editar motivo de pantalla' : 'Editar publicación';
@@ -4506,6 +4632,464 @@
       )}`;
     }
   }, 60000);
+
+  // =====================================================================
+  // WELCOME & ROLE SELECTION (Multi-Profesor & Alumnos)
+  // =====================================================================
+  function updateWelcomeSessionsDropdown() {
+    if (!el.welcomeStudentSessionSelect) return;
+    const accessible = (state.sessions || []).filter(
+      (s) => s.isPublished !== false && !s.hideFromStudents
+    );
+    if (accessible.length === 0) {
+      el.welcomeStudentSessionSelect.innerHTML =
+        '<option value="">(No hay clases habilitadas por el profesor en este momento)</option>';
+      return;
+    }
+    el.welcomeStudentSessionSelect.innerHTML = accessible
+      .map(
+        (s) =>
+          `<option value="${escapeHtml(s.id)}" ${
+            s.id === state.activeSessionId ? 'selected' : ''
+          }>${escapeHtml(s.name)}${s.isClosed ? ' (🔒 Solo lectura)' : ''}</option>`
+      )
+      .join('');
+  }
+
+  function openWelcomeModal({ dismissible = false } = {}) {
+    if (!el.welcomeRoleModal) return;
+    if (el.welcomeStudentName) el.welcomeStudentName.value = authorName || '';
+    if (el.welcomeTeacherName) el.welcomeTeacherName.value = state.teacherName || 'Docente';
+    if (el.welcomeTeacherPin) el.welcomeTeacherPin.value = '';
+    if (el.welcomeTeacherError) el.welcomeTeacherError.classList.add('hidden');
+
+    updateWelcomeSessionsDropdown();
+
+    if (el.btnCloseWelcomeModal) {
+      el.btnCloseWelcomeModal.classList.toggle('hidden', !dismissible);
+    }
+    openModal(el.welcomeRoleModal);
+  }
+
+  if (el.welcomeStudentForm) {
+    el.welcomeStudentForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = el.welcomeStudentName?.value?.trim();
+      const targetSessionId = el.welcomeStudentSessionSelect?.value;
+      if (!name) {
+        showToast('Por favor escribe tu nombre de estudiante', 'error');
+        el.welcomeStudentName?.focus();
+        return;
+      }
+
+      setAuthorName(name);
+      state.isTeacher = false;
+      state.teacherToken = '';
+      sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
+      sessionStorage.setItem(STORAGE_ROLE_KEY, 'student');
+      updateTeacherUI();
+      updateStudentMenuUI();
+
+      if (targetSessionId && targetSessionId !== state.activeSessionId) {
+        state.hasChosenSession = true;
+        socket.emit('session:join', { sessionId: targetSessionId, teacherToken: '' }, (ack) => {
+          if (!ack?.ok) showToast(ack?.error || 'No se pudo entrar a la clase seleccionada', 'error');
+          else showToast(`📚 Entraste a "${ack.snapshot?.board?.title || 'la clase'}"`, 'success');
+        });
+      } else {
+        state.hasChosenSession = true;
+      }
+
+      socket.emit('client:register', {
+        authorId,
+        authorName: name,
+        teacherToken: '',
+        teacherName: '',
+      });
+
+      closeModal(el.welcomeRoleModal);
+      showToast(`🎒 ¡Bienvenido/a, ${name}! Has ingresado como Alumno.`, 'success');
+    });
+  }
+
+  if (el.welcomeTeacherForm) {
+    el.welcomeTeacherForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const enteredName = el.welcomeTeacherName?.value?.trim() || 'Docente';
+      const pin = el.welcomeTeacherPin?.value?.trim();
+      if (!pin) {
+        if (el.welcomeTeacherError) {
+          el.welcomeTeacherError.textContent = 'Ingresa el PIN de profesor.';
+          el.welcomeTeacherError.classList.remove('hidden');
+        }
+        el.welcomeTeacherPin?.focus();
+        return;
+      }
+      el.welcomeTeacherError?.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/teacher/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.token) {
+          if (el.welcomeTeacherError) {
+            el.welcomeTeacherError.textContent = data.error || 'PIN incorrecto.';
+            el.welcomeTeacherError.classList.remove('hidden');
+          }
+          el.welcomeTeacherPin?.select();
+          return;
+        }
+
+        state.teacherName = enteredName;
+        localStorage.setItem(STORAGE_TEACHER_NAME_KEY, enteredName);
+        state.teacherToken = data.token;
+        state.isTeacher = true;
+        sessionStorage.setItem(STORAGE_TEACHER_TOKEN_KEY, data.token);
+        sessionStorage.setItem(STORAGE_ROLE_KEY, 'teacher');
+        state.hasChosenSession = true;
+
+        socket.emit('client:register', {
+          authorId,
+          authorName: enteredName,
+          teacherToken: data.token,
+          teacherName: enteredName,
+        });
+
+        updateTeacherUI();
+        closeModal(el.welcomeRoleModal);
+        showToast(`🎓 ¡Bienvenido, ${state.teacherName}! Modo Docente activado.`, 'success');
+      } catch {
+        if (el.welcomeTeacherError) {
+          el.welcomeTeacherError.textContent = 'No se pudo verificar el PIN.';
+          el.welcomeTeacherError.classList.remove('hidden');
+        }
+      }
+    });
+  }
+
+  if (el.btnWelcomeAboutDev) {
+    el.btnWelcomeAboutDev.addEventListener('click', () => {
+      openModal(el.aboutDevModal);
+    });
+  }
+
+  // Role Switching Menu Items
+  el.menuItemStudentSwitchRole?.addEventListener('click', () => {
+    closeActionMenus();
+    openWelcomeModal({ dismissible: true });
+  });
+
+  el.menuItemTeacherSwitchRole?.addEventListener('click', () => {
+    closeActionMenus();
+    openWelcomeModal({ dismissible: true });
+  });
+
+  // =====================================================================
+  // LIVE SESSION CHAT DRAWER & PRIVATE MESSAGING
+  // =====================================================================
+  function openChatDrawer() {
+    state.isChatOpen = true;
+    state.unreadChatCount = 0;
+    if (el.chatUnreadBadge) {
+      el.chatUnreadBadge.textContent = '0';
+      el.chatUnreadBadge.classList.add('hidden');
+    }
+    if (el.chatDrawer) el.chatDrawer.classList.remove('hidden');
+    if (el.chatDrawerBackdrop) el.chatDrawerBackdrop.classList.remove('hidden');
+    if (el.chatSessionBadge) {
+      el.chatSessionBadge.textContent = state.board?.title || 'Clase';
+    }
+
+    socket.emit('chat:history', { sessionId: state.activeSessionId }, (res) => {
+      if (res?.ok && Array.isArray(res.messages)) {
+        renderChatMessages(res.messages);
+      }
+    });
+
+    setTimeout(() => {
+      if (el.chatInputText) el.chatInputText.focus();
+    }, 150);
+  }
+
+  function closeChatDrawer() {
+    state.isChatOpen = false;
+    if (el.chatDrawer) el.chatDrawer.classList.add('hidden');
+    if (el.chatDrawerBackdrop) el.chatDrawerBackdrop.classList.add('hidden');
+  }
+
+  function switchChatTab(tab) {
+    state.activeChatTab = tab;
+    if (el.tabChatMessages) el.tabChatMessages.classList.toggle('active', tab === 'messages');
+    if (el.tabChatUsers) el.tabChatUsers.classList.toggle('active', tab === 'users');
+    if (el.chatMessagesPane) el.chatMessagesPane.classList.toggle('hidden', tab !== 'messages');
+    if (el.chatUsersPane) el.chatUsersPane.classList.toggle('hidden', tab !== 'users');
+  }
+
+  function renderChatMessages(messages) {
+    state.chatMessages = Array.isArray(messages) ? messages : [];
+    if (!el.chatMessagesList) return;
+    if (state.chatMessages.length === 0) {
+      el.chatMessagesList.innerHTML = `
+        <div class="chat-empty-state">
+          <div class="chat-empty-icon">💬</div>
+          <p>No hay mensajes en esta sesión aún.</p>
+          <span class="muted-note">Los mensajes son independientes por sesión y respetan privacidad.</span>
+        </div>
+      `;
+      return;
+    }
+
+    el.chatMessagesList.innerHTML = state.chatMessages
+      .map((m) => {
+        const isOutgoing = m.authorId === authorId;
+        const isPriv = Boolean(m.isPrivate);
+        const roleTag = m.isTeacher
+          ? '<span class="chat-bubble-role-tag role-tag-teacher">🎓 Docente</span>'
+          : '<span class="chat-bubble-role-tag role-tag-student">🎒 Alumno</span>';
+        const privateBadge = isPriv
+          ? `<span class="chat-bubble-badge-private">🔒 ${
+              isOutgoing
+                ? `Privado para ${escapeHtml(m.toName || 'Docente')}`
+                : `Privado de ${escapeHtml(m.authorName || 'Usuario')}`
+            }</span>`
+          : '';
+        return `
+          <div class="chat-bubble ${isOutgoing ? 'is-outgoing' : 'is-incoming'} ${isPriv ? 'is-private' : ''}">
+            <div class="chat-bubble-head">
+              <span class="chat-bubble-author">${escapeHtml(
+                m.authorName || (m.isTeacher ? 'Docente' : 'Alumno')
+              )}</span>
+              ${roleTag}
+              ${privateBadge}
+              <span class="chat-bubble-time">${formatRelativeTime(m.createdAt)}</span>
+            </div>
+            <p class="chat-bubble-text">${formatTextWithLinks(m.text)}</p>
+          </div>
+        `;
+      })
+      .join('');
+
+    el.chatMessagesList.scrollTop = el.chatMessagesList.scrollHeight;
+  }
+
+  function appendChatMessage(msg) {
+    if (!msg) return;
+    const isForThisSession = !msg.sessionId || msg.sessionId === state.activeSessionId;
+    if (!isForThisSession) return;
+
+    if (!Array.isArray(state.chatMessages)) state.chatMessages = [];
+    state.chatMessages.push(msg);
+
+    if (state.isChatOpen) {
+      const empty = el.chatMessagesList.querySelector('.chat-empty-state');
+      if (empty) empty.remove();
+
+      const isOutgoing = msg.authorId === authorId;
+      const isPriv = Boolean(msg.isPrivate);
+      const roleTag = msg.isTeacher
+        ? '<span class="chat-bubble-role-tag role-tag-teacher">🎓 Docente</span>'
+        : '<span class="chat-bubble-role-tag role-tag-student">🎒 Alumno</span>';
+      const privateBadge = isPriv
+        ? `<span class="chat-bubble-badge-private">🔒 ${
+            isOutgoing
+              ? `Privado para ${escapeHtml(msg.toName || 'Docente')}`
+              : `Privado de ${escapeHtml(msg.authorName || 'Usuario')}`
+          }</span>`
+        : '';
+
+      const bubble = document.createElement('div');
+      bubble.className = `chat-bubble ${isOutgoing ? 'is-outgoing' : 'is-incoming'} ${
+        isPriv ? 'is-private' : ''
+      }`;
+      bubble.innerHTML = `
+        <div class="chat-bubble-head">
+          <span class="chat-bubble-author">${escapeHtml(
+            msg.authorName || (msg.isTeacher ? 'Docente' : 'Alumno')
+          )}</span>
+          ${roleTag}
+          ${privateBadge}
+          <span class="chat-bubble-time">${formatRelativeTime(msg.createdAt)}</span>
+        </div>
+        <p class="chat-bubble-text">${formatTextWithLinks(msg.text)}</p>
+      `;
+      el.chatMessagesList.appendChild(bubble);
+      el.chatMessagesList.scrollTop = el.chatMessagesList.scrollHeight;
+    } else {
+      state.unreadChatCount = (state.unreadChatCount || 0) + 1;
+      if (el.chatUnreadBadge) {
+        el.chatUnreadBadge.textContent = String(Math.min(99, state.unreadChatCount));
+        el.chatUnreadBadge.classList.remove('hidden');
+      }
+      playChime('info');
+    }
+  }
+
+  function renderChatUsers(users) {
+    state.chatUsers = Array.isArray(users) ? users : [];
+    const count = state.chatUsers.length;
+    if (el.chatOnlineUsersCount) el.chatOnlineUsersCount.textContent = String(count);
+    if (el.chatPresenceInfo) {
+      el.chatPresenceInfo.textContent = `${count} ${count === 1 ? 'conectado' : 'conectados'} en esta sesión`;
+    }
+
+    if (el.chatRecipientSelect) {
+      const currentVal = el.chatRecipientSelect.value;
+      let optionsHtml = `
+        <option value="all">📢 Todos en la sesión (Público)</option>
+        <option value="teachers">🎓 Docente(s) (Privado)</option>
+      `;
+
+      state.chatUsers.forEach((u) => {
+        if (u.authorId !== authorId) {
+          const roleLabel = u.isTeacher ? '🎓 Prof.' : '🎒';
+          optionsHtml += `<option value="user:${escapeHtml(u.authorId)}" data-user-name="${escapeHtml(
+            u.name
+          )}">${roleLabel} ${escapeHtml(u.name)} (Privado)</option>`;
+        }
+      });
+      el.chatRecipientSelect.innerHTML = optionsHtml;
+      if (currentVal && el.chatRecipientSelect.querySelector(`option[value="${CSS.escape(currentVal)}"]`)) {
+        el.chatRecipientSelect.value = currentVal;
+      }
+    }
+
+    if (el.chatUsersList) {
+      if (state.chatUsers.length === 0) {
+        el.chatUsersList.innerHTML = '<div class="muted-note">No hay nadie más conectado en esta sesión.</div>';
+        return;
+      }
+
+      el.chatUsersList.innerHTML = state.chatUsers
+        .map((u) => {
+          const isMe = u.authorId === authorId;
+          const initials = getInitials(u.name);
+          const color = getAvatarColor(u.name || u.authorId);
+          const roleTag = u.isTeacher
+            ? '<span class="chat-bubble-role-tag role-tag-teacher">🎓 Docente</span>'
+            : '<span class="chat-bubble-role-tag role-tag-student">🎒 Alumno</span>';
+          return `
+            <div class="chat-user-item">
+              <div class="chat-user-left">
+                <div class="chat-user-avatar" style="background:${color}">${escapeHtml(initials)}</div>
+                <div class="chat-user-details">
+                  <div class="chat-user-name">${escapeHtml(u.name)} ${isMe ? '<strong>(Tú)</strong>' : ''}</div>
+                  <div class="chat-user-status-row">
+                    <span class="chat-user-status-dot"></span>
+                    ${roleTag}
+                  </div>
+                </div>
+              </div>
+              ${
+                !isMe
+                  ? `<button type="button" class="btn btn-sm btn-secondary btn-chat-private" data-chat-with="${escapeHtml(
+                      u.authorId
+                    )}" data-chat-name="${escapeHtml(u.name)}">💬 Privado</button>`
+                  : ''
+              }
+            </div>
+          `;
+        })
+        .join('');
+    }
+  }
+
+  // Chat Trigger Buttons
+  el.btnOpenChat?.addEventListener('click', () => {
+    if (state.isChatOpen) closeChatDrawer();
+    else openChatDrawer();
+  });
+  el.btnCloseChat?.addEventListener('click', closeChatDrawer);
+  el.chatDrawerBackdrop?.addEventListener('click', closeChatDrawer);
+
+  el.menuItemStudentChat?.addEventListener('click', () => {
+    closeActionMenus();
+    openChatDrawer();
+  });
+  el.menuItemTeacherChat?.addEventListener('click', () => {
+    closeActionMenus();
+    openChatDrawer();
+  });
+
+  el.tabChatMessages?.addEventListener('click', () => switchChatTab('messages'));
+  el.tabChatUsers?.addEventListener('click', () => switchChatTab('users'));
+
+  el.chatRecipientSelect?.addEventListener('change', () => {
+    const val = el.chatRecipientSelect.value;
+    if (val === 'all') {
+      el.chatPrivacyNote?.classList.add('hidden');
+    } else {
+      el.chatPrivacyNote?.classList.remove('hidden');
+    }
+  });
+
+  el.chatForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = el.chatInputText?.value?.trim();
+    if (!text) return;
+    const to = el.chatRecipientSelect?.value || 'all';
+    const selectedOpt = el.chatRecipientSelect?.selectedOptions[0];
+    const toName = selectedOpt?.dataset?.userName || selectedOpt?.textContent?.trim() || '';
+
+    socket.emit(
+      'chat:send',
+      {
+        sessionId: state.activeSessionId,
+        text,
+        to,
+        toName,
+        authorName: state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno'),
+      },
+      (ack) => {
+        if (ack?.ok) {
+          if (el.chatInputText) el.chatInputText.value = '';
+        } else {
+          showToast(ack?.error || 'No se pudo enviar el mensaje', 'error');
+        }
+      }
+    );
+  });
+
+  el.btnClearChat?.addEventListener('click', () => {
+    if (!confirm('¿Deseas limpiar todos los mensajes del chat de esta sesión?')) return;
+    socket.emit('chat:clear', { teacherToken: state.teacherToken, sessionId: state.activeSessionId }, (ack) => {
+      if (!ack?.ok) showToast(ack?.error || 'No se pudo limpiar el chat', 'error');
+      else showToast('Chat de la sesión limpiado');
+    });
+  });
+
+  el.chatUsersList?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-chat-with]');
+    if (!btn) return;
+    const authorTargetId = btn.dataset.chatWith;
+    if (el.chatRecipientSelect) {
+      el.chatRecipientSelect.value = `user:${authorTargetId}`;
+      el.chatPrivacyNote?.classList.remove('hidden');
+    }
+    switchChatTab('messages');
+    setTimeout(() => el.chatInputText?.focus(), 100);
+  });
+
+  // Socket chat listeners
+  socket.on('chat:users', ({ sessionId, users }) => {
+    if (sessionId === state.activeSessionId) {
+      renderChatUsers(users);
+    }
+  });
+
+  socket.on('chat:message', (msg) => {
+    appendChatMessage(msg);
+  });
+
+  socket.on('chat:cleared', ({ sessionId }) => {
+    if (sessionId === state.activeSessionId) {
+      state.chatMessages = [];
+      renderChatMessages([]);
+      showToast('Chat de la sesión limpiado');
+    }
+  });
 
   // Clean bridge for modular extensions (quiz.js)
   window.PadletApp = {

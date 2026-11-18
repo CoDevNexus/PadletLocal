@@ -57,6 +57,13 @@
           <span id="notifBadge" class="notif-badge hidden">0</span>
         </button>
 
+        <button id="btnOpenChat" class="icon-btn chat-toggle-btn" title="Chat en vivo de la sesión" aria-label="Abrir Chat de la sesión">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span id="chatUnreadBadge" class="chat-unread-badge hidden">0</span>
+        </button>
+
         <!-- Hidden desktop utility anchors for script compatibility -->
         <div class="hidden">
           <div class="mode-switch" id="uiModeToggle">
@@ -132,6 +139,77 @@
 
   <!-- Mobile Backdrop Overlay for Menus -->
   <div id="menuBackdropOverlay" class="menu-backdrop-overlay hidden"></div>
+
+  <!-- Live Session Chat Drawer -->
+  <div id="chatDrawerBackdrop" class="chat-drawer-backdrop hidden"></div>
+  <aside id="chatDrawer" class="chat-drawer hidden" aria-label="Chat de la Sesión" role="complementary">
+    <div class="chat-drawer-header">
+      <div class="chat-drawer-title-box">
+        <div class="chat-drawer-title">
+          <span>💬 Chat de la Sesión</span>
+          <span id="chatSessionBadge" class="chat-session-badge">Clase</span>
+        </div>
+        <div class="chat-drawer-subtitle">
+          <span class="chat-live-dot"></span>
+          <span id="chatPresenceInfo">Conectados en esta sesión</span>
+        </div>
+      </div>
+      <div class="chat-drawer-head-actions">
+        <button type="button" id="btnClearChat" class="icon-btn-subtle teacher-only" title="Limpiar historial de chat de esta sesión">🧹</button>
+        <button type="button" id="btnCloseChat" class="icon-btn-subtle" aria-label="Cerrar chat">✕</button>
+      </div>
+    </div>
+
+    <div class="chat-tabs" role="tablist">
+      <button type="button" id="tabChatMessages" class="chat-tab active">
+        <span>💬 Mensajes</span>
+      </button>
+      <button type="button" id="tabChatUsers" class="chat-tab">
+        <span>👥 En línea</span>
+        <span id="chatOnlineUsersCount" class="chat-tab-count">0</span>
+      </button>
+    </div>
+
+    <!-- Messages Pane -->
+    <div id="chatMessagesPane" class="chat-pane active">
+      <div class="chat-target-bar">
+        <label for="chatRecipientSelect" class="chat-target-label">Para:</label>
+        <select id="chatRecipientSelect" class="chat-recipient-select">
+          <option value="all">📢 Todos en la sesión (Público)</option>
+          <option value="teachers">🎓 Docente(s) (Privado)</option>
+        </select>
+      </div>
+      <div id="chatPrivacyNote" class="chat-privacy-note hidden">
+        🔒 <span>Mensaje privado: solo tú y el destinatario lo verán.</span>
+      </div>
+
+      <div id="chatMessagesList" class="chat-messages-list">
+        <div class="chat-empty-state">
+          <div class="chat-empty-icon">💬</div>
+          <p>No hay mensajes en esta sesión aún.</p>
+          <span class="muted-note">Los mensajes son por sesión y con privacidad estricta.</span>
+        </div>
+      </div>
+
+      <form id="chatForm" class="chat-input-form">
+        <input id="chatInputText" type="text" maxlength="500" placeholder="Escribe un mensaje..." autocomplete="off" required />
+        <button type="submit" id="btnSendChat" class="btn btn-primary btn-chat-send" title="Enviar mensaje">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </form>
+    </div>
+
+    <!-- Online Participants Pane -->
+    <div id="chatUsersPane" class="chat-pane hidden">
+      <div class="chat-users-intro">
+        <span>Personas conectadas a esta sesión en tiempo real:</span>
+      </div>
+      <div id="chatUsersList" class="chat-users-list"></div>
+    </div>
+  </aside>
 
   <!-- Student Action Menu Dropdown / Bottom Sheet -->
   <div id="studentActionMenu" class="action-menu-dropdown role-menu-student hidden" role="menu" aria-label="Menú del Alumno">
@@ -217,6 +295,13 @@
             <span class="action-menu-item-desc" id="studentMenuUiState">Modo Completo</span>
           </div>
         </button>
+        <button type="button" class="action-menu-item" id="menuItemStudentChat">
+          <span class="action-menu-item-icon">💬</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Chat de la Sesión</span>
+            <span class="action-menu-item-desc">Ver participantes en línea y enviar mensajes</span>
+          </div>
+        </button>
         <button type="button" class="action-menu-item" id="menuItemStudentDev">
           <span class="action-menu-item-icon">⚡</span>
           <div class="action-menu-item-content">
@@ -225,6 +310,13 @@
           </div>
         </button>
         <div class="action-menu-divider"></div>
+        <button type="button" class="action-menu-item" id="menuItemStudentSwitchRole">
+          <span class="action-menu-item-icon">🔄</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Cambiar Rol / Perfil</span>
+            <span class="action-menu-item-desc">Cambiar tu nombre o pasar a modo Docente</span>
+          </div>
+        </button>
         <button type="button" class="action-menu-item action-menu-item--highlight" id="menuItemTeacherLogin">
           <span class="action-menu-item-icon">🎓</span>
           <div class="action-menu-item-content">
@@ -327,6 +419,13 @@
             <span class="action-menu-item-desc">Guía para el docente</span>
           </div>
         </a>
+        <button type="button" class="action-menu-item" id="menuItemTeacherChat">
+          <span class="action-menu-item-icon">💬</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Chat de la Sesión</span>
+            <span class="action-menu-item-desc">Atender consultas privadas de alumnos o hablar a todos</span>
+          </div>
+        </button>
         <button type="button" class="action-menu-item" id="menuItemTeacherDev">
           <span class="action-menu-item-icon">⚡</span>
           <div class="action-menu-item-content">
@@ -335,6 +434,13 @@
           </div>
         </button>
         <div class="action-menu-divider"></div>
+        <button type="button" class="action-menu-item" id="menuItemTeacherSwitchRole">
+          <span class="action-menu-item-icon">🔄</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Cambiar Rol / Perfil</span>
+            <span class="action-menu-item-desc">Cambiar docente o volver al menú inicial</span>
+          </div>
+        </button>
         <button type="button" class="action-menu-item action-menu-item--danger" id="menuItemTeacherLogout">
           <span class="action-menu-item-icon">🚪</span>
           <div class="action-menu-item-content">
@@ -902,9 +1008,13 @@
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <div class="checkbox-row">
-              <label class="checkbox-label">
+              <label class="checkbox-label" title="Visible para que los alumnos puedan ver y entrar a la sesión">
                 <input id="newSessionPublishCheck" type="checkbox" checked />
-                <span>Habilitada (visible para alumnos)</span>
+                <span>Habilitada</span>
+              </label>
+              <label class="checkbox-label" title="Si se activa, los alumnos NO podrán verla ni entrar a ella; queda exclusiva para docentes">
+                <input id="newSessionHideStudentsCheck" type="checkbox" />
+                <span>🚫 Ocultar y sin acceso para alumnos</span>
               </label>
               <label class="checkbox-label">
                 <input id="newSessionActivateCheck" type="checkbox" checked />
@@ -1374,6 +1484,82 @@
       <div class="teacher-modal-bottom">
         <button type="button" id="btnCopyQuizAnalytics" class="btn btn-sm btn-secondary">📋 Copiar resumen</button>
         <button type="button" class="btn btn-sm btn-primary" data-close-modal="quizAnalyticsModal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Welcome & Role Selection (Student vs Teacher Multi-Profesor) -->
+  <div id="welcomeRoleModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="welcomeRoleTitle">
+    <div class="modal modal-welcome">
+      <div class="modal-header welcome-header">
+        <div class="welcome-header-content">
+          <div class="welcome-app-icon">📚</div>
+          <div>
+            <h2 id="welcomeRoleTitle" style="margin:0;font-size:1.25rem;">¡Bienvenido a PadletLocal!</h2>
+            <div class="welcome-app-subtitle">Elige cómo deseas ingresar a esta sesión en la red local</div>
+          </div>
+        </div>
+        <button id="btnCloseWelcomeModal" class="icon-btn hidden" data-close-modal="welcomeRoleModal" aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="modal-body welcome-body">
+        <div class="welcome-cards-grid">
+          <!-- Card 1: Alumno -->
+          <div class="welcome-card welcome-card--student">
+            <div class="welcome-card-header">
+              <span class="welcome-card-icon">🎒</span>
+              <div>
+                <h3 class="welcome-card-title">Soy Alumno</h3>
+                <p class="welcome-card-desc">Participar en clase, subir notas y responder consignas</p>
+              </div>
+            </div>
+            <form id="welcomeStudentForm" class="welcome-card-form">
+              <div class="form-group">
+                <label for="welcomeStudentName">Tu Nombre o Apodo <span class="req">*</span></label>
+                <input id="welcomeStudentName" type="text" maxlength="35" placeholder="Ej. Camila Morales" required />
+              </div>
+              <div class="form-group">
+                <label for="welcomeStudentSessionSelect">Sesión / Clase disponible <span class="req">*</span></label>
+                <select id="welcomeStudentSessionSelect" class="select-input" required>
+                  <option value="">Cargando clases disponibles...</option>
+                </select>
+              </div>
+              <button type="submit" id="btnEnterAsStudent" class="btn btn-primary btn-welcome-enter">
+                🎒 Ingresar como Alumno
+              </button>
+            </form>
+          </div>
+
+          <!-- Card 2: Docente (Multi-Profesor) -->
+          <div class="welcome-card welcome-card--teacher">
+            <div class="welcome-card-header">
+              <span class="welcome-card-icon">🎓</span>
+              <div>
+                <h3 class="welcome-card-title">Soy Docente</h3>
+                <p class="welcome-card-desc">Administrar tareas, tests, recesos, sesiones y alumnos</p>
+              </div>
+            </div>
+            <form id="welcomeTeacherForm" class="welcome-card-form">
+              <div class="form-group">
+                <label for="welcomeTeacherName">Nombre del Docente <span class="req">*</span></label>
+                <input id="welcomeTeacherName" type="text" maxlength="50" placeholder="Ej. Prof. Carlos Méndez" required />
+              </div>
+              <div class="form-group">
+                <label for="welcomeTeacherPin">PIN de Acceso Docente <span class="req">*</span></label>
+                <input id="welcomeTeacherPin" type="password" inputmode="numeric" maxlength="20" placeholder="Ingresa el PIN de profesor" required />
+              </div>
+              <div id="welcomeTeacherError" class="form-error hidden"></div>
+              <button type="submit" id="btnEnterAsTeacher" class="btn btn-indigo btn-welcome-enter">
+                🎓 Ingresar como Docente
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="welcome-modal-foot">
+        <span class="welcome-safe-tag">🔒 100% Red Local · Privacidad total para cursos y colegios</span>
+        <button type="button" id="btnWelcomeAboutDev" class="btn btn-xs btn-ghost">⚡ Sobre CoDevNexus</button>
       </div>
     </div>
   </div>

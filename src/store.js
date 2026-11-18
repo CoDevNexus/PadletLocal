@@ -18,6 +18,8 @@ function createBlankSession({
   description = DEFAULT_BOARD_DESC,
   isPublished = true,
   isClosed = false,
+  hideFromStudents = false,
+  teacherName = null,
   id,
 } = {}) {
   const cleanName = String(name || 'Sesión Principal').trim().slice(0, 80) || 'Sesión Principal';
@@ -28,6 +30,8 @@ function createBlankSession({
     createdAt: new Date().toISOString(),
     isPublished: Boolean(isPublished),
     isClosed: Boolean(isClosed),
+    hideFromStudents: Boolean(hideFromStudents),
+    teacherName: teacherName ? String(teacherName).slice(0, 60) : null,
     board: {
       title: cleanName,
       description: cleanDesc,
@@ -40,6 +44,7 @@ function createBlankSession({
     scheduledTimers: [],
     quizzes: [],
     activeQuiz: null,
+    chatMessages: [],
   };
 }
 
@@ -51,6 +56,8 @@ function normalizeSession(raw) {
     createdAt: raw?.createdAt || new Date().toISOString(),
     isPublished: raw?.isPublished !== false,
     isClosed: Boolean(raw?.isClosed),
+    hideFromStudents: Boolean(raw?.hideFromStudents),
+    teacherName: raw?.teacherName ? String(raw.teacherName).slice(0, 60) : null,
     board: {
       title: raw?.board?.title || fallbackName,
       description: raw?.board?.description ?? DEFAULT_BOARD_DESC,
@@ -74,6 +81,7 @@ function normalizeSession(raw) {
     scheduledTimers: Array.isArray(raw?.scheduledTimers) ? raw.scheduledTimers : [],
     quizzes: Array.isArray(raw?.quizzes) ? raw.quizzes : [],
     activeQuiz: raw?.activeQuiz || null,
+    chatMessages: Array.isArray(raw?.chatMessages) ? raw.chatMessages.slice(-500) : [],
   };
 }
 
@@ -204,18 +212,22 @@ class BoardStore {
 
   getDefaultStudentSession() {
     const active = this.getActiveSession();
-    if (active.isPublished) return active;
-    return this.data.sessions.find((s) => s.isPublished) || null;
+    if (active.isPublished && !active.hideFromStudents) return active;
+    return this.data.sessions.find((s) => s.isPublished && !s.hideFromStudents) || null;
   }
 
-  getSessionsSummary({ onlyPublished = false } = {}) {
+  getSessionsSummary({ onlyPublished = false, isTeacher = false } = {}) {
     const activeId = this.getActiveSessionId();
-    const list = onlyPublished
-      ? this.data.sessions.filter((s) => s.isPublished)
-      : this.data.sessions;
+    const list = this.data.sessions.filter((s) => {
+      if (isTeacher) return true;
+      if (s.isPublished === false) return false;
+      if (s.hideFromStudents) return false;
+      if (onlyPublished && !s.isPublished) return false;
+      return true;
+    });
 
     return list.map((s) => {
-      const visiblePosts = onlyPublished ? s.posts.filter((p) => !p.isHidden) : s.posts;
+      const visiblePosts = !isTeacher ? s.posts.filter((p) => !p.isHidden) : s.posts;
       const padletCount = visiblePosts.filter((p) => p.kind !== 'screen').length;
       const screenCount = visiblePosts.filter((p) => p.kind === 'screen').length;
       const reviewedCount = visiblePosts.filter((p) => p.kind !== 'screen' && p.reviewed).length;
@@ -227,6 +239,8 @@ class BoardStore {
         createdAt: s.createdAt,
         isPublished: s.isPublished !== false,
         isClosed: Boolean(s.isClosed),
+        hideFromStudents: Boolean(s.hideFromStudents),
+        teacherName: s.teacherName || null,
         postCount: visiblePosts.length,
         padletCount,
         screenCount,
@@ -239,14 +253,16 @@ class BoardStore {
     });
   }
 
-  createSession({ name, description, isPublished = true, activate = true }) {
+  createSession({ name, description, isPublished = true, isClosed = false, hideFromStudents = false, teacherName = null, activate = true }) {
     const cleanName = String(name || '').trim().slice(0, 80);
     if (!cleanName) throw new Error('Ingresa un nombre para la nueva sesión de clase.');
     const session = createBlankSession({
       name: cleanName,
       description: typeof description === 'string' && description.trim() ? description.trim() : DEFAULT_BOARD_DESC,
       isPublished: isPublished !== false,
-      isClosed: false,
+      isClosed: Boolean(isClosed),
+      hideFromStudents: Boolean(hideFromStudents),
+      teacherName: teacherName ? String(teacherName).slice(0, 60) : null,
     });
     this.data.sessions.unshift(session);
     if (activate) {
@@ -264,7 +280,7 @@ class BoardStore {
     return target;
   }
 
-  setSessionStatus(sessionId, { isPublished, isClosed }) {
+  setSessionStatus(sessionId, { isPublished, isClosed, hideFromStudents }) {
     const target = this.getSessionById(sessionId);
     if (!target) throw new Error('Sesión de clase no encontrada.');
     if (typeof isPublished === 'boolean') {
@@ -272,6 +288,9 @@ class BoardStore {
     }
     if (typeof isClosed === 'boolean') {
       target.isClosed = isClosed;
+    }
+    if (typeof hideFromStudents === 'boolean') {
+      target.hideFromStudents = hideFromStudents;
     }
     this.save();
     return target;
@@ -419,8 +438,36 @@ class BoardStore {
     return session.posts.find((p) => p.id === id) || null;
   }
 
-  createPost({ authorId, author, topic, content, color, imageUrl, imageName, kind = 'padlet' }, sessionId = null) {
-    const session = this.resolveSession(sessionId);
+  createPost(payload = {}, sessionIdOrForce = null, maybeForce = false) {
+    const {
+      authorId,
+      author,
+      topic,
+      content,
+      color,
+      imageUrl,
+      imageName,
+      kind = 'padlet',
+      sessionId: payloadSid,
+    } = payload || {};
+
+    let sessionId = null;
+    let force = Boolean(payload?.force);
+
+    if (typeof sessionIdOrForce === 'boolean') {
+      force = force || sessionIdOrForce;
+    } else if (typeof sessionIdOrForce === 'string') {
+      sessionId = sessionIdOrForce;
+    }
+
+    if (typeof maybeForce === 'boolean') {
+      force = force || maybeForce;
+    }
+
+    const session = this.resolveSession(sessionId || payloadSid);
+    if (session.isClosed && !force) {
+      throw new Error('Esta sesión de clase está cerrada. No se pueden crear publicaciones.');
+    }
     const cleanAuthor = String(author || '').trim().slice(0, 50);
     const cleanTopic = String(topic || '').trim().slice(0, 100);
     const cleanContent = String(content || '').trim().slice(0, 3000);
@@ -471,6 +518,10 @@ class BoardStore {
     { authorId, topic, content, color, imageUrl, imageName, removeImage, force = false },
     sessionId = null
   ) {
+    const session = this.resolveSession(sessionId);
+    if (session.isClosed && !force) {
+      throw new Error('Esta sesión de clase está cerrada. No se pueden modificar publicaciones.');
+    }
     const post = this.getPostById(id, sessionId);
     if (!post) throw new Error('Publicación no encontrada.');
     if (!force && post.authorId !== authorId) {
@@ -614,8 +665,21 @@ class BoardStore {
     }
   }
 
-  deletePost(id, authorId, { force = false } = {}, sessionId = null) {
-    const session = this.resolveSession(sessionId);
+  deletePost(id, authorId, optionsOrForce = {}, sessionId = null) {
+    const force = typeof optionsOrForce === 'boolean' ? optionsOrForce : Boolean(optionsOrForce?.force);
+    let session = sessionId ? this.resolveSession(sessionId) : null;
+    if (!session) {
+      for (const s of this.data.sessions) {
+        if (s.posts.some((p) => p.id === id)) {
+          session = s;
+          break;
+        }
+      }
+    }
+    if (!session) session = this.resolveSession(null);
+    if (session.isClosed && !force) {
+      throw new Error('Esta sesión de clase está cerrada. No se pueden eliminar publicaciones.');
+    }
     const idx = session.posts.findIndex((p) => p.id === id);
     if (idx === -1) throw new Error('Publicación no encontrada.');
     const post = session.posts[idx];
@@ -632,7 +696,11 @@ class BoardStore {
     return post;
   }
 
-  toggleLike(id, authorId, sessionId = null) {
+  toggleLike(id, authorId, sessionId = null, { force = false } = {}) {
+    const session = this.resolveSession(sessionId);
+    if (session.isClosed && !force) {
+      throw new Error('Esta sesión de clase está cerrada.');
+    }
     const post = this.getPostById(id, sessionId);
     if (!post) throw new Error('Publicación no encontrada.');
     if (!authorId) throw new Error('Identificador de usuario inválido.');
@@ -648,7 +716,11 @@ class BoardStore {
     return post;
   }
 
-  addComment(id, { authorId, author, text }, sessionId = null) {
+  addComment(id, { authorId, author, text, force = false }, sessionId = null) {
+    const session = this.resolveSession(sessionId);
+    if (session.isClosed && !force) {
+      throw new Error('Esta sesión de clase está cerrada. Los comentarios están deshabilitados.');
+    }
     const post = this.getPostById(id, sessionId);
     if (!post) throw new Error('Publicación no encontrada.');
 
@@ -1488,6 +1560,43 @@ class BoardStore {
     } catch (err) {
       console.warn('No se pudo eliminar la imagen anterior:', err.message);
     }
+  }
+
+  // --- Chat System (Per-Session, Strict Privacy) ---
+  addChatMessage(sessionId, message) {
+    const session = this.resolveSession(sessionId);
+    if (!Array.isArray(session.chatMessages)) {
+      session.chatMessages = [];
+    }
+    session.chatMessages.push(message);
+    if (session.chatMessages.length > 500) {
+      session.chatMessages = session.chatMessages.slice(-500);
+    }
+    this.save();
+    return message;
+  }
+
+  getSessionChat(sessionId, { authorId, isTeacher = false } = {}) {
+    const session = this.resolveSession(sessionId);
+    const msgs = Array.isArray(session.chatMessages) ? session.chatMessages : [];
+    // Strict privacy filtering:
+    return msgs.filter((m) => {
+      if (!m.isPrivate || m.to === 'all') return true;
+      const mFrom = m.fromId || m.authorId;
+      const mTo = m.to;
+      if (mFrom === authorId) return true;
+      if (mTo === authorId || mTo === `user:${authorId}`) return true;
+      if (isTeacher && (mTo === 'teacher' || mTo === 'teachers')) return true;
+      if ((m.fromRole === 'teacher' || m.isTeacher) && (mTo === authorId || mTo === `user:${authorId}`)) return true;
+      return false;
+    });
+  }
+
+  clearSessionChat(sessionId) {
+    const session = this.resolveSession(sessionId);
+    session.chatMessages = [];
+    this.save();
+    return true;
   }
 }
 

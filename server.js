@@ -72,6 +72,29 @@ function isValidTeacherToken(token) {
 const activeShares = new Map();
 // Connected client authorId registry: socketId -> authorId
 const socketAuthors = new Map();
+// Connected client identity registry: socketId -> { socketId, authorId, name, role, isTeacher, sessionId }
+const connectedClients = new Map();
+
+function getSessionOnlineUsers(sessionId) {
+  if (!sessionId) return [];
+  const users = [];
+  const seenAuthors = new Set();
+  for (const client of connectedClients.values()) {
+    if (client.sessionId === sessionId) {
+      if (!seenAuthors.has(client.authorId)) {
+        seenAuthors.add(client.authorId);
+        users.push({
+          authorId: client.authorId,
+          name: client.name,
+          role: client.role,
+          isTeacher: client.isTeacher,
+          socketId: client.socketId,
+        });
+      }
+    }
+  }
+  return users;
+}
 // Per-session screen share turn queues: sessionId -> [{ id, authorId, author, reason, status, createdAt }]
 const screenQueuesBySession = new Map();
 
@@ -334,13 +357,15 @@ app.post('/api/teacher/change-pin', (req, res) => {
 app.get('/api/posts', (req, res) => {
   const sid = req.query.sessionId || store.getActiveSessionId();
   const session = store.getSessionById(sid);
-  if (!session || !session.isPublished) {
-    return res.status(404).json({ error: 'Sesión no disponible.' });
+  const token = req.headers['x-teacher-token'] || req.query.token;
+  const isTeacher = isValidTeacherToken(token);
+  if (!session || (!isTeacher && (!session.isPublished || session.hideFromStudents))) {
+    return res.status(403).json({ error: 'Esta sesión está cerrada o sin acceso para alumnos. Solo el profesor con su clave maestra puede ingresar.' });
   }
   res.json({
     sessionId: session.id,
     board: session.board,
-    posts: getEnrichedPosts(session.id, { includeHidden: false }),
+    posts: getEnrichedPosts(session.id, { includeHidden: isTeacher }),
     assignment: session.assignment,
     timer: session.timer,
     scheduledTimers: store.getScheduledTimers(session.id),
@@ -348,6 +373,13 @@ app.get('/api/posts', (req, res) => {
     screenQueue: getSessionQueue(session.id),
     serverTime: Date.now(),
   });
+});
+
+app.get('/api/sessions', (req, res) => {
+  const token = req.headers['x-teacher-token'] || req.query.token;
+  const isTeacher = isValidTeacherToken(token);
+  const list = store.getSessionsSummary({ isTeacher, onlyPublished: !isTeacher });
+  return res.json({ sessions: list, activeSessionId: store.getActiveSessionId() });
 });
 
 app.post('/api/upload', (req, res) => {
@@ -409,7 +441,9 @@ function getRoomSockets(sessionId) {
 function broadcastPresence(sessionId) {
   if (!sessionId) return;
   const count = io.sockets.adapter.rooms.get(sessionRoom(sessionId))?.size || 0;
+  const users = getSessionOnlineUsers(sessionId);
   io.to(sessionRoom(sessionId)).emit('presence:count', { count });
+  io.to(sessionRoom(sessionId)).emit('chat:users', { users, count });
 }
 
 function broadcastScreenQueue(sessionId) {
@@ -509,6 +543,7 @@ function buildSessionSnapshot(sessionId, { socketId = null, isTeacher = false } 
     sessionStatus: {
       isPublished: session.isPublished !== false,
       isClosed: Boolean(session.isClosed),
+      hideFromStudents: Boolean(session.hideFromStudents),
     },
     sessions,
     board: session.board,
@@ -526,8 +561,8 @@ function buildSessionSnapshot(sessionId, { socketId = null, isTeacher = false } 
 }
 
 function broadcastSessionsSummaryToAll() {
-  const teacherList = store.getSessionsSummary({ onlyPublished: false });
-  const studentList = store.getSessionsSummary({ onlyPublished: true });
+  const teacherList = store.getSessionsSummary({ isTeacher: true, onlyPublished: false });
+  const studentList = store.getSessionsSummary({ isTeacher: false, onlyPublished: true });
   const defaultActiveId = store.getActiveSessionId();
 
   for (const sock of io.sockets.sockets.values()) {
@@ -554,6 +589,10 @@ function joinSocketToSession(socket, targetSessionId) {
     broadcastPresence(prevSessionId);
   }
   socket.data.sessionId = targetSessionId || null;
+  const clientInfo = connectedClients.get(socket.id);
+  if (clientInfo) {
+    clientInfo.sessionId = targetSessionId || null;
+  }
   if (targetSessionId) {
     socket.join(sessionRoom(targetSessionId));
     broadcastPresence(targetSessionId);
@@ -671,14 +710,32 @@ io.on('connection', (socket) => {
     buildSessionSnapshot(socket.data.sessionId, { socketId: socket.id, isTeacher: false })
   );
 
-  // Register client authorId & optional teacher status
-  socket.on('client:register', ({ authorId, teacherToken } = {}, ack) => {
+  // Register client authorId, authorName, role & optional teacher status
+  socket.on('client:register', ({ authorId, authorName, teacherToken, teacherName } = {}, ack) => {
     if (authorId && typeof authorId === 'string') {
       socketAuthors.set(socket.id, authorId.slice(0, 80));
+      socket.data.authorId = authorId.slice(0, 80);
     }
     const nowTeacher = isValidTeacherToken(teacherToken);
     const teacherChanged = socket.data.isTeacher !== nowTeacher;
     socket.data.isTeacher = nowTeacher;
+    const cleanAuthorName = authorName ? String(authorName).trim().slice(0, 50) : '';
+    const cleanTeacherName = teacherName ? String(teacherName).trim().slice(0, 50) : '';
+    socket.data.authorName = cleanAuthorName;
+    socket.data.teacherName = cleanTeacherName;
+
+    const displayName = nowTeacher
+      ? (cleanTeacherName || 'Docente')
+      : (cleanAuthorName || 'Alumno');
+
+    connectedClients.set(socket.id, {
+      socketId: socket.id,
+      authorId: socket.data.authorId || socket.id,
+      name: displayName,
+      role: nowTeacher ? 'teacher' : 'student',
+      isTeacher: nowTeacher,
+      sessionId: socket.data.sessionId || null,
+    });
 
     // If teacher just logged in (or logged out), refresh their session view & hidden posts
     if (teacherChanged) {
@@ -688,7 +745,7 @@ io.on('connection', (socket) => {
         joinSocketToSession(socket, sid);
       } else if (!nowTeacher && sid) {
         const cur = store.getSessionById(sid);
-        if (!cur || !cur.isPublished) {
+        if (!cur || !cur.isPublished || cur.hideFromStudents) {
           const fallback = store.getDefaultStudentSession();
           joinSocketToSession(socket, fallback ? fallback.id : null);
           sid = socket.data.sessionId;
@@ -700,11 +757,15 @@ io.on('connection', (socket) => {
       );
     }
 
+    if (socket.data.sessionId) {
+      broadcastPresence(socket.data.sessionId);
+    }
+
     if (typeof ack === 'function') {
       ack({
         ok: true,
         isTeacher: nowTeacher,
-        sessions: store.getSessionsSummary({ onlyPublished: !nowTeacher }),
+        sessions: store.getSessionsSummary({ isTeacher: nowTeacher, onlyPublished: !nowTeacher }),
       });
     }
   });
@@ -717,8 +778,8 @@ io.on('connection', (socket) => {
 
       const target = store.getSessionById(sessionId);
       if (!target) throw new Error('Sesión de clase no encontrada.');
-      if (!isTeacher && !target.isPublished) {
-        throw new Error('Esta sesión no está habilitada por el profesor.');
+      if (!isTeacher && (!target.isPublished || target.hideFromStudents)) {
+        throw new Error('Esta sesión está cerrada o sin acceso para alumnos. Solo el profesor con su clave maestra puede ingresar.');
       }
 
       joinSocketToSession(socket, target.id);
@@ -797,13 +858,13 @@ io.on('connection', (socket) => {
     try {
       requireTeacher(payload?.teacherToken);
       socket.data.isTeacher = true;
-      const { sessionId, isPublished, isClosed } = payload || {};
-      const updated = store.setSessionStatus(sessionId, { isPublished, isClosed });
+      const { sessionId, isPublished, isClosed, hideFromStudents } = payload || {};
+      const updated = store.setSessionStatus(sessionId, { isPublished, isClosed, hideFromStudents });
 
-      if (isPublished === false) {
+      if (isPublished === false || updated.hideFromStudents) {
         kickStudentsFromSession(
           updated.id,
-          `El profesor despublicó la sesión "${updated.name}". Elige otra sesión habilitada.`
+          `La sesión "${updated.name}" ha sido cerrada u ocultada para alumnos por el docente. Elige otra sesión habilitada.`
         );
       }
 
@@ -811,6 +872,7 @@ io.on('connection', (socket) => {
         sessionId: updated.id,
         isPublished: updated.isPublished,
         isClosed: updated.isClosed,
+        hideFromStudents: updated.hideFromStudents,
       });
 
       broadcastSessionsSummaryToAll();
@@ -819,7 +881,7 @@ io.on('connection', (socket) => {
         ack({
           ok: true,
           session: updated,
-          sessions: store.getSessionsSummary({ onlyPublished: false }),
+          sessions: store.getSessionsSummary({ isTeacher: true, onlyPublished: false }),
         });
       }
     } catch (err) {
@@ -1138,11 +1200,12 @@ io.on('connection', (socket) => {
   socket.on('post:delete', (payload, ack) => {
     try {
       const { id, authorId, teacherToken, sessionId } = payload || {};
-      const session = getSocketSession(socket, sessionId);
+      const session = assertSessionWritable(socket, teacherToken, sessionId);
+      const isTeacher = socket.data.isTeacher || isValidTeacherToken(teacherToken);
       const deleted = store.deletePost(
         id,
         authorId,
-        { force: isValidTeacherToken(teacherToken) },
+        { force: isTeacher },
         session.id
       );
       if (activeShares.has(deleted.id)) {
@@ -1158,7 +1221,7 @@ io.on('connection', (socket) => {
 
   socket.on('post:like', (payload, ack) => {
     try {
-      const session = getSocketSession(socket, payload?.sessionId);
+      const session = assertSessionWritable(socket, payload?.teacherToken, payload?.sessionId);
       const { id, authorId } = payload || {};
       const post = store.toggleLike(id, authorId, session.id);
       const enriched = enrichPost(post);
@@ -1816,9 +1879,120 @@ io.on('connection', (socket) => {
     io.to(to).emit('webrtc:ice-candidate', { from: socket.id, postId, candidate });
   });
 
+  // --- Real-Time Chat System (Per-Session with Strict Privacy) ---
+  socket.on('chat:history', ({ sessionId } = {}, ack) => {
+    try {
+      const sid = sessionId || socket.data.sessionId;
+      if (!sid) {
+        if (typeof ack === 'function') ack({ ok: true, messages: [] });
+        return;
+      }
+      const authorId = socket.data.authorId || socketAuthors.get(socket.id) || socket.id;
+      const isTeacher = Boolean(socket.data.isTeacher);
+      const messages = store.getSessionChat(sid, { authorId, isTeacher });
+      if (typeof ack === 'function') ack({ ok: true, messages });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('chat:send', (payload, ack) => {
+    try {
+      const sid = payload?.sessionId || socket.data.sessionId;
+      if (!sid) throw new Error('No estás conectado a ninguna sesión de clase.');
+
+      const cleanText = String(payload?.text || '').trim().slice(0, 1000);
+      if (!cleanText) throw new Error('El mensaje no puede estar vacío.');
+
+      const isTeacher = Boolean(socket.data.isTeacher);
+      const authorId = socket.data.authorId || socketAuthors.get(socket.id) || socket.id;
+      const clientInfo = connectedClients.get(socket.id);
+      const fromName = clientInfo?.name || (isTeacher ? 'Docente' : 'Alumno');
+      const fromRole = isTeacher ? 'teacher' : 'student';
+
+      const to = String(payload?.to || 'all').trim();
+      const targetAuthorId = to.startsWith('user:') ? to.slice(5) : to;
+      const toName = String(
+        payload?.toName ||
+          (to === 'all'
+            ? 'Todos'
+            : to === 'teachers' || to === 'teacher'
+            ? 'Docente'
+            : 'Privado')
+      )
+        .trim()
+        .slice(0, 60);
+      const isPrivate = to !== 'all';
+
+      const msg = {
+        id: crypto.randomUUID(),
+        sessionId: sid,
+        fromId: authorId,
+        authorId,
+        fromName,
+        authorName: fromName,
+        fromRole,
+        isTeacher,
+        to,
+        toName,
+        text: cleanText,
+        timestamp: Date.now(),
+        createdAt: new Date().toISOString(),
+        isPrivate,
+      };
+
+      store.addChatMessage(sid, msg);
+
+      // Routing with STRICT PRIVACY:
+      if (!isPrivate || to === 'all') {
+        // Public message in this session:
+        io.to(sessionRoom(sid)).emit('chat:message', msg);
+      } else if (to === 'teacher' || to === 'teachers') {
+        // Private to teacher:
+        const senderSockets = getSocketsByAuthorId(authorId, sid);
+        senderSockets.forEach((sId) => io.sockets.sockets.get(sId)?.emit('chat:message', msg));
+
+        for (const [sId, c] of connectedClients.entries()) {
+          if (c.sessionId === sid && c.isTeacher && !senderSockets.includes(sId)) {
+            io.sockets.sockets.get(sId)?.emit('chat:message', msg);
+          }
+        }
+      } else {
+        // Private 1-to-1 between users:
+        const senderSockets = getSocketsByAuthorId(authorId, sid);
+        senderSockets.forEach((sId) => io.sockets.sockets.get(sId)?.emit('chat:message', msg));
+
+        const targetSockets = getSocketsByAuthorId(targetAuthorId, sid);
+        targetSockets.forEach((sId) => {
+          if (!senderSockets.includes(sId)) {
+            io.sockets.sockets.get(sId)?.emit('chat:message', msg);
+          }
+        });
+      }
+
+      if (typeof ack === 'function') ack({ ok: true, message: msg });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('chat:clear', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const sid = payload?.sessionId || socket.data.sessionId;
+      if (!sid) throw new Error('Sesión no encontrada.');
+      store.clearSessionChat(sid);
+      io.to(sessionRoom(sid)).emit('chat:cleared', { sessionId: sid });
+      if (typeof ack === 'function') ack({ ok: true });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
   socket.on('disconnect', () => {
     const sid = socket.data.sessionId;
     socketAuthors.delete(socket.id);
+    connectedClients.delete(socket.id);
     for (const [postId, share] of Array.from(activeShares.entries())) {
       if (share.sharerSocketId === socket.id) {
         stopScreenShare(postId, 'presenter-disconnected');
