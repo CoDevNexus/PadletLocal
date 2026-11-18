@@ -1396,6 +1396,12 @@
       el.inputTopic.value = task.title.slice(0, 100);
       if (authorName) el.inputContent.focus();
     }
+    if (el.composerTitle) {
+      el.composerTitle.textContent = 'Responder tarea: ' + (task?.title || '');
+    }
+    if (el.btnSubmitPost) {
+      el.btnSubmitPost.textContent = 'Publicar respuesta';
+    }
   });
 
   function showTaskImagePreview(src) {
@@ -1403,6 +1409,11 @@
       el.taskImagePreview.src = src;
       el.taskImagePreviewBox.classList.remove('hidden');
       el.taskDropzonePlaceholder.classList.add('hidden');
+      setTimeout(() => {
+        if (el.btnSaveAssignment) {
+          el.btnSaveAssignment.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
     } else {
       el.taskImagePreview.src = '';
       el.taskImagePreviewBox.classList.add('hidden');
@@ -4317,6 +4328,11 @@
       el.imagePreview.src = src;
       el.imagePreviewBox.classList.remove('hidden');
       el.dropzonePlaceholder.classList.add('hidden');
+      setTimeout(() => {
+        if (el.btnSubmitPost) {
+          el.btnSubmitPost.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
     } else {
       el.imagePreview.src = '';
       el.imagePreviewBox.classList.add('hidden');
