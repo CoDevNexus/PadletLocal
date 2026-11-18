@@ -1,0 +1,4052 @@
+(() => {
+  // --- Utilities ---
+  function generateId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatTextWithLinks(text) {
+    const escaped = escapeHtml(text);
+    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+    return escaped.replace(
+      urlRegex,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+  }
+
+  function formatRelativeTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const diffSec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    if (diffSec < 15) return 'ahora mismo';
+    if (diffSec < 60) return `hace ${diffSec}s`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `hace ${diffMin} min`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `hace ${diffHr} h`;
+    return date.toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function formatCountdown(totalSeconds) {
+    const sec = Math.max(0, Math.floor(totalSeconds));
+    const hrs = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    const remSec = sec % 60;
+    const mm = String(mins).padStart(2, '0');
+    const ss = String(remSec).padStart(2, '0');
+    if (hrs > 0) {
+      return `${String(hrs).padStart(2, '0')}:${mm}:${ss}`;
+    }
+    return `${mm}:${ss}`;
+  }
+
+  function formatClockTime(epochMs) {
+    return new Date(epochMs).toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function getInitials(name) {
+    const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  const AVATAR_COLORS = [
+    '#4f46e5',
+    '#0284c7',
+    '#059669',
+    '#d97706',
+    '#e11d48',
+    '#7c3aed',
+    '#0d9488',
+    '#ea580c',
+  ];
+
+  function getAvatarColor(seed) {
+    let hash = 0;
+    const str = String(seed || '');
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash * 31 + str.charCodeAt(i)) | 0;
+    }
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  }
+
+  async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const temp = document.createElement('textarea');
+      temp.value = text;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      temp.remove();
+    }
+  }
+
+  // --- Offline Web Audio Chime Engine ---
+  let audioCtx = null;
+  function playChime(type = 'info') {
+    if (!state.soundEnabled) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtx) audioCtx = new Ctx();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+
+      const now = audioCtx.currentTime;
+      const sequences = {
+        info: [
+          { freq: 587.33, start: 0, dur: 0.14 },
+          { freq: 880.0, start: 0.14, dur: 0.22 },
+        ],
+        task: [
+          { freq: 523.25, start: 0, dur: 0.12 },
+          { freq: 659.25, start: 0.12, dur: 0.12 },
+          { freq: 783.99, start: 0.24, dur: 0.24 },
+        ],
+        recess: [
+          { freq: 659.25, start: 0, dur: 0.16 },
+          { freq: 783.99, start: 0.16, dur: 0.16 },
+          { freq: 1046.5, start: 0.32, dur: 0.3 },
+        ],
+        warning: [
+          { freq: 880.0, start: 0, dur: 0.14 },
+          { freq: 880.0, start: 0.18, dur: 0.14 },
+          { freq: 1046.5, start: 0.36, dur: 0.28 },
+        ],
+      };
+
+      const notes = sequences[type] || sequences.info;
+      notes.forEach(({ freq, start, dur }) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+        gain.gain.setValueAtTime(0.001, now + start);
+        gain.gain.exponentialRampToValueAtTime(0.14, now + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + start);
+        osc.stop(now + start + dur + 0.02);
+      });
+    } catch {
+      // Ignore autoplay audio restrictions
+    }
+  }
+
+  // --- Persistent Client Identity ---
+  const STORAGE_ID_KEY = 'padletlocal_author_id';
+  const STORAGE_NAME_KEY = 'padletlocal_author_name';
+  const STORAGE_SOUND_KEY = 'padletlocal_sound_enabled';
+  const STORAGE_TEACHER_TOKEN_KEY = 'padletlocal_teacher_token';
+  const STORAGE_UI_MODE_KEY = 'padletlocal_ui_mode';
+  const STORAGE_DENSITY_KEY = 'padletlocal_density_mode';
+  const AUTO_COMPACT_THRESHOLD = 6;
+
+  let authorId = localStorage.getItem(STORAGE_ID_KEY);
+  if (!authorId) {
+    authorId = generateId();
+    localStorage.setItem(STORAGE_ID_KEY, authorId);
+  }
+  let authorName = localStorage.getItem(STORAGE_NAME_KEY) || '';
+
+  // --- App State ---
+  const state = {
+    socketId: null,
+    serverOffsetMs: 0,
+    activeSessionId: null,
+    sessionStatus: { isPublished: true, isClosed: false },
+    hasChosenSession: false,
+    sessions: [],
+    board: {
+      title: 'PadletLocal',
+      description: 'Panel colaborativo en red local — ideas, imágenes y pantalla compartida en tiempo real.',
+    },
+    posts: [],
+    assignment: null,
+    assignmentHistory: [],
+    expandedTaskId: null, // null = all task mini-cards compact; task.id = expanded
+    screenQueue: [],
+    workspaceView: localStorage.getItem('padletlocal_workspace_view') || 'padlets', // 'padlets' | 'screens' | 'both'
+    notifications: [],
+    unreadNotifications: 0,
+    timer: null,
+    scheduledTimers: [],
+    soundEnabled: localStorage.getItem(STORAGE_SOUND_KEY) !== 'false',
+    uiMode: localStorage.getItem(STORAGE_UI_MODE_KEY) || 'full', // 'easy' | 'full'
+    densityMode: localStorage.getItem(STORAGE_DENSITY_KEY) || 'auto', // 'auto' | 'compact' | 'normal'
+    focusedCardId: null,
+    pendingResumePostId: null,
+    pendingTurnGrant: null, // { queueId, author, reason }
+    teacherToken: sessionStorage.getItem(STORAGE_TEACHER_TOKEN_KEY) || '',
+    isTeacher: false,
+    activeTeacherTab: 'assignment',
+
+    activeTopic: '__ALL__', // '__ALL__' | '__LIVE__' | '__UNREVIEWED__' | '__REVIEWED__' | topic string
+    searchQuery: '',
+    expandedCards: new Set(),
+    openComments: new Set(),
+    serverInfo: null,
+
+    // Post composer image state
+    selectedFile: null,
+    existingImageUrl: null,
+    existingImageName: null,
+    removeExistingImage: false,
+    selectedColor: 'default',
+
+    // Assignment image state
+    taskSelectedFile: null,
+    taskExistingImageUrl: null,
+    taskExistingImageName: null,
+    taskRemoveExistingImage: false,
+  };
+
+  function serverNow() {
+    return Date.now() + state.serverOffsetMs;
+  }
+
+  // --- DOM References ---
+  const el = {
+    boardTitle: document.getElementById('boardTitle'),
+    activeSessionBadge: document.getElementById('activeSessionBadge'),
+    boardDescription: document.getElementById('boardDescription'),
+    btnEditBoard: document.getElementById('btnEditBoard'),
+    searchInput: document.getElementById('searchInput'),
+    connectionDot: document.getElementById('connectionDot'),
+    onlineCount: document.getElementById('onlineCount'),
+    uiModeToggle: document.getElementById('uiModeToggle'),
+    btnOpenManual: document.getElementById('btnOpenManual'),
+    btnHelpGuide: document.getElementById('btnHelpGuide'),
+    helpGuideModal: document.getElementById('helpGuideModal'),
+    btnHelpSwitchEasy: document.getElementById('btnHelpSwitchEasy'),
+    easyModeBar: document.getElementById('easyModeBar'),
+    btnEasyPublish: document.getElementById('btnEasyPublish'),
+    btnEasyShare: document.getElementById('btnEasyShare'),
+    btnEasyHelp: document.getElementById('btnEasyHelp'),
+    densityControl: document.getElementById('densityControl'),
+    compactHint: document.getElementById('compactHint'),
+    resumeScreenModal: document.getElementById('resumeScreenModal'),
+    resumeScreenText: document.getElementById('resumeScreenText'),
+    btnAcceptResumeScreen: document.getElementById('btnAcceptResumeScreen'),
+    btnSoundToggle: document.getElementById('btnSoundToggle'),
+    soundIconOn: document.getElementById('soundIconOn'),
+    soundIconOff: document.getElementById('soundIconOff'),
+    btnNotifications: document.getElementById('btnNotifications'),
+    notifBadge: document.getElementById('notifBadge'),
+    btnTeacherMode: document.getElementById('btnTeacherMode'),
+    teacherBtnLabel: document.getElementById('teacherBtnLabel'),
+    btnNetworkInfo: document.getElementById('btnNetworkInfo'),
+    btnOpenScreenModal: document.getElementById('btnOpenScreenModal'),
+    btnNewPost: document.getElementById('btnNewPost'),
+    fabNewPost: document.getElementById('fabNewPost'),
+    httpsBanner: document.getElementById('httpsBanner'),
+    httpsSwitchLink: document.getElementById('httpsSwitchLink'),
+    btnDismissHttpsBanner: document.getElementById('btnDismissHttpsBanner'),
+
+    // Session Status Banner & Session Picker Modal
+    sessionStatusBanner: document.getElementById('sessionStatusBanner'),
+    sessionStatusText: document.getElementById('sessionStatusText'),
+    sessionStatusActions: document.getElementById('sessionStatusActions'),
+    sessionPickerModal: document.getElementById('sessionPickerModal'),
+    sessionPickerTitle: document.getElementById('sessionPickerTitle'),
+    sessionPickerIntro: document.getElementById('sessionPickerIntro'),
+    sessionPickerList: document.getElementById('sessionPickerList'),
+    btnCloseSessionPicker: document.getElementById('btnCloseSessionPicker'),
+    btnPickerTeacherLogin: document.getElementById('btnPickerTeacherLogin'),
+    btnPickerManageSessions: document.getElementById('btnPickerManageSessions'),
+
+    // Classroom Timer & Scheduled Bar
+    classroomBar: document.getElementById('classroomBar'),
+    activeTimerBanner: document.getElementById('activeTimerBanner'),
+    timerKindBadge: document.getElementById('timerKindBadge'),
+    timerLabelText: document.getElementById('timerLabelText'),
+    timerMessageText: document.getElementById('timerMessageText'),
+    timerDigits: document.getElementById('timerDigits'),
+    timerReturnText: document.getElementById('timerReturnText'),
+    timerProgressFill: document.getElementById('timerProgressFill'),
+    btnTimerProjector: document.getElementById('btnTimerProjector'),
+    timerTeacherControls: document.getElementById('timerTeacherControls'),
+    btnTimerPauseResume: document.getElementById('btnTimerPauseResume'),
+    btnTimerExtend: document.getElementById('btnTimerExtend'),
+    btnTimerStop: document.getElementById('btnTimerStop'),
+    scheduledTimersStrip: document.getElementById('scheduledTimersStrip'),
+
+    // Projector Overlay
+    timerProjectorModal: document.getElementById('timerProjectorModal'),
+    btnCloseProjector: document.getElementById('btnCloseProjector'),
+    projectorKindBadge: document.getElementById('projectorKindBadge'),
+    projectorLabel: document.getElementById('projectorLabel'),
+    projectorDigits: document.getElementById('projectorDigits'),
+    projectorMessage: document.getElementById('projectorMessage'),
+    projectorReturn: document.getElementById('projectorReturn'),
+    projectorProgressFill: document.getElementById('projectorProgressFill'),
+
+    // Compact Click-to-Grow Tasks Strip
+    assignmentSection: document.getElementById('assignmentSection'),
+    tasksMiniGrid: document.getElementById('tasksMiniGrid'),
+    assignmentExpandedCard: document.getElementById('assignmentExpandedCard'),
+    assignmentExpandedBadge: document.getElementById('assignmentExpandedBadge'),
+    assignmentTitle: document.getElementById('assignmentTitle'),
+    assignmentDue: document.getElementById('assignmentDue'),
+    assignmentMeta: document.getElementById('assignmentMeta'),
+    btnEditAssignmentInline: document.getElementById('btnEditAssignmentInline'),
+    btnToggleAssignment: document.getElementById('btnToggleAssignment'),
+    assignmentBody: document.getElementById('assignmentBody'),
+    assignmentInstructions: document.getElementById('assignmentInstructions'),
+    assignmentImageWrap: document.getElementById('assignmentImageWrap'),
+    assignmentImage: document.getElementById('assignmentImage'),
+    btnCopyAssignment: document.getElementById('btnCopyAssignment'),
+    btnRespondAssignment: document.getElementById('btnRespondAssignment'),
+
+    // Workspace Tabs (Padlets vs Pantallas y Cola)
+    workspaceTabs: document.getElementById('workspaceTabs'),
+    tabPadletsCount: document.getElementById('tabPadletsCount'),
+    tabScreensLiveBadge: document.getElementById('tabScreensLiveBadge'),
+    tabQueueBadge: document.getElementById('tabQueueBadge'),
+    padletsSection: document.getElementById('padletsSection'),
+    screensSection: document.getElementById('screensSection'),
+
+    // Screens & Queue Panel
+    queueCountLabel: document.getElementById('queueCountLabel'),
+    btnQueueJoinQuick: document.getElementById('btnQueueJoinQuick'),
+    btnClearQueue: document.getElementById('btnClearQueue'),
+    screenQueueList: document.getElementById('screenQueueList'),
+    screensCountLabel: document.getElementById('screensCountLabel'),
+    btnShareScreenFromTab: document.getElementById('btnShareScreenFromTab'),
+    screensEmptyState: document.getElementById('screensEmptyState'),
+    btnScreensEmptyShare: document.getElementById('btnScreensEmptyShare'),
+    screensGrid: document.getElementById('screensGrid'),
+
+    // Simple Screen Share Modal (Name + Reason ONLY)
+    screenShareModal: document.getElementById('screenShareModal'),
+    screenShareForm: document.getElementById('screenShareForm'),
+    screenAuthorInput: document.getElementById('screenAuthorInput'),
+    screenReasonInput: document.getElementById('screenReasonInput'),
+    screenModalError: document.getElementById('screenModalError'),
+    btnJoinScreenQueue: document.getElementById('btnJoinScreenQueue'),
+    btnStartScreenDirect: document.getElementById('btnStartScreenDirect'),
+
+    // Announcements & Notifications
+    announcementStack: document.getElementById('announcementStack'),
+    notificationsModal: document.getElementById('notificationsModal'),
+    notificationsList: document.getElementById('notificationsList'),
+    btnEnableBrowserNotif: document.getElementById('btnEnableBrowserNotif'),
+
+    // Teacher Login & Control Panel
+    teacherLoginModal: document.getElementById('teacherLoginModal'),
+    teacherLoginForm: document.getElementById('teacherLoginForm'),
+    inputTeacherPin: document.getElementById('inputTeacherPin'),
+    teacherLoginError: document.getElementById('teacherLoginError'),
+
+    teacherPanelModal: document.getElementById('teacherPanelModal'),
+    btnTeacherLogout: document.getElementById('btnTeacherLogout'),
+    assignmentForm: document.getElementById('assignmentForm'),
+    taskTitleInput: document.getElementById('taskTitleInput'),
+    taskDueInput: document.getElementById('taskDueInput'),
+    taskInstructionsInput: document.getElementById('taskInstructionsInput'),
+    taskImageDropzone: document.getElementById('taskImageDropzone'),
+    taskImageInput: document.getElementById('taskImageInput'),
+    taskDropzonePlaceholder: document.getElementById('taskDropzonePlaceholder'),
+    taskImagePreviewBox: document.getElementById('taskImagePreviewBox'),
+    taskImagePreview: document.getElementById('taskImagePreview'),
+    btnRemoveTaskImage: document.getElementById('btnRemoveTaskImage'),
+    taskPinnedCheck: document.getElementById('taskPinnedCheck'),
+    taskNotifyCheck: document.getElementById('taskNotifyCheck'),
+    btnClearAssignment: document.getElementById('btnClearAssignment'),
+    btnSaveAssignment: document.getElementById('btnSaveAssignment'),
+    assignmentHistoryBox: document.getElementById('assignmentHistoryBox'),
+    assignmentHistoryList: document.getElementById('assignmentHistoryList'),
+
+    notifyForm: document.getElementById('notifyForm'),
+    notifyTitleInput: document.getElementById('notifyTitleInput'),
+    notifyTypeSelect: document.getElementById('notifyTypeSelect'),
+    notifyMessageInput: document.getElementById('notifyMessageInput'),
+    notifySoundCheck: document.getElementById('notifySoundCheck'),
+
+    timerKindSelect: document.getElementById('timerKindSelect'),
+    timerLabelInput: document.getElementById('timerLabelInput'),
+    timerMessageInput: document.getElementById('timerMessageInput'),
+    timerDurationInput: document.getElementById('timerDurationInput'),
+    timerStartNotifyCheck: document.getElementById('timerStartNotifyCheck'),
+    btnStartTimerNow: document.getElementById('btnStartTimerNow'),
+    scheduleTimeInput: document.getElementById('scheduleTimeInput'),
+    scheduleDurationInput: document.getElementById('scheduleDurationInput'),
+    scheduleNotifyCheck: document.getElementById('scheduleNotifyCheck'),
+    btnScheduleTimer: document.getElementById('btnScheduleTimer'),
+    teacherScheduledListBox: document.getElementById('teacherScheduledListBox'),
+    teacherScheduledList: document.getElementById('teacherScheduledList'),
+
+    // Teacher Sessions & Clean/Reset Tab
+    createSessionForm: document.getElementById('createSessionForm'),
+    newSessionNameInput: document.getElementById('newSessionNameInput'),
+    newSessionDescInput: document.getElementById('newSessionDescInput'),
+    newSessionPublishCheck: document.getElementById('newSessionPublishCheck'),
+    newSessionActivateCheck: document.getElementById('newSessionActivateCheck'),
+    btnCreateSession: document.getElementById('btnCreateSession'),
+    sessionsCountNum: document.getElementById('sessionsCountNum'),
+    sessionsList: document.getElementById('sessionsList'),
+    btnClearSessionPosts: document.getElementById('btnClearSessionPosts'),
+    btnResetSessionFull: document.getElementById('btnResetSessionFull'),
+
+    // Board & Toolbar
+    topicBar: document.getElementById('topicBar'),
+    postCounter: document.getElementById('postCounter'),
+    btnUserChip: document.getElementById('btnUserChip'),
+    userChipAvatar: document.getElementById('userChipAvatar'),
+    userChipName: document.getElementById('userChipName'),
+    emptyState: document.getElementById('emptyState'),
+    btnEmptyCreate: document.getElementById('btnEmptyCreate'),
+    btnEmptyShare: document.getElementById('btnEmptyShare'),
+    boardGrid: document.getElementById('boardGrid'),
+
+    // Composer modal
+    composerModal: document.getElementById('composerModal'),
+    composerTitle: document.getElementById('composerTitle'),
+    composerForm: document.getElementById('composerForm'),
+    editPostId: document.getElementById('editPostId'),
+    inputAuthor: document.getElementById('inputAuthor'),
+    inputTopic: document.getElementById('inputTopic'),
+    topicSuggestions: document.getElementById('topicSuggestions'),
+    inputContent: document.getElementById('inputContent'),
+    imageDropzone: document.getElementById('imageDropzone'),
+    inputImage: document.getElementById('inputImage'),
+    dropzonePlaceholder: document.getElementById('dropzonePlaceholder'),
+    imagePreviewBox: document.getElementById('imagePreviewBox'),
+    imagePreview: document.getElementById('imagePreview'),
+    btnRemoveImage: document.getElementById('btnRemoveImage'),
+    colorPicker: document.getElementById('colorPicker'),
+    composerError: document.getElementById('composerError'),
+    btnSubmitPost: document.getElementById('btnSubmitPost'),
+
+    // Network modal
+    networkModal: document.getElementById('networkModal'),
+    qrCodeImg: document.getElementById('qrCodeImg'),
+    lanHttpsUrl: document.getElementById('lanHttpsUrl'),
+    lanHttpUrl: document.getElementById('lanHttpUrl'),
+    otherInterfacesBox: document.getElementById('otherInterfacesBox'),
+    otherInterfacesList: document.getElementById('otherInterfacesList'),
+
+    // HTTPS required modal
+    httpsRequiredModal: document.getElementById('httpsRequiredModal'),
+    httpsRequiredUrl: document.getElementById('httpsRequiredUrl'),
+    httpsRequiredGoBtn: document.getElementById('httpsRequiredGoBtn'),
+
+    // Board edit modal
+    boardEditModal: document.getElementById('boardEditModal'),
+    boardEditForm: document.getElementById('boardEditForm'),
+    inputBoardTitle: document.getElementById('inputBoardTitle'),
+    inputBoardDesc: document.getElementById('inputBoardDesc'),
+
+    // Quick name modal
+    nameModal: document.getElementById('nameModal'),
+    nameForm: document.getElementById('nameForm'),
+    inputQuickName: document.getElementById('inputQuickName'),
+
+    // Lightbox
+    lightboxModal: document.getElementById('lightboxModal'),
+    lightboxImg: document.getElementById('lightboxImg'),
+    lightboxCaption: document.getElementById('lightboxCaption'),
+    lightboxClose: document.getElementById('lightboxClose'),
+
+    // Developer info & updates (CoDevNexus)
+    btnAboutDev: document.getElementById('btnAboutDev'),
+    aboutDevModal: document.getElementById('aboutDevModal'),
+    btnCheckUpdates: document.getElementById('btnCheckUpdates'),
+    updatesResultBox: document.getElementById('updatesResultBox'),
+    appCurrentVersionBadge: document.getElementById('appCurrentVersionBadge'),
+
+    toastContainer: document.getElementById('toastContainer'),
+  };
+
+  // --- Toast Helper ---
+  function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    el.toastContainer.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.25s ease';
+      setTimeout(() => toast.remove(), 260);
+    }, 3200);
+  }
+
+  // --- Modal Helpers ---
+  function openModal(modalEl) {
+    modalEl.classList.remove('hidden');
+  }
+
+  function closeModal(modalEl) {
+    modalEl.classList.add('hidden');
+  }
+
+  document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.closeModal);
+      if (!target) return;
+      if (target === el.sessionPickerModal) {
+        if (!state.activeSessionId) return;
+        state.hasChosenSession = true;
+      }
+      closeModal(target);
+    });
+  });
+
+  document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        if (backdrop === el.sessionPickerModal) {
+          if (!state.activeSessionId) return;
+          state.hasChosenSession = true;
+        }
+        closeModal(backdrop);
+      }
+    });
+  });
+
+  // --- Sound Toggle UI ---
+  function updateSoundUI() {
+    el.soundIconOn.classList.toggle('hidden', !state.soundEnabled);
+    el.soundIconOff.classList.toggle('hidden', state.soundEnabled);
+    el.btnSoundToggle.title = state.soundEnabled
+      ? 'Sonido de notificaciones activado (clic para silenciar)'
+      : 'Sonido silenciado (clic para activar)';
+  }
+
+  el.btnSoundToggle.addEventListener('click', () => {
+    state.soundEnabled = !state.soundEnabled;
+    localStorage.setItem(STORAGE_SOUND_KEY, String(state.soundEnabled));
+    updateSoundUI();
+    if (state.soundEnabled) playChime('info');
+  });
+  updateSoundUI();
+
+  // --- User Identity UI ---
+  function updateUserChipUI() {
+    if (authorName) {
+      el.userChipName.textContent = authorName;
+      el.userChipAvatar.textContent = getInitials(authorName);
+      el.userChipAvatar.style.background = getAvatarColor(authorId);
+      el.userChipAvatar.style.color = '#fff';
+    } else {
+      el.userChipName.textContent = 'Definir nombre';
+      el.userChipAvatar.textContent = '?';
+      el.userChipAvatar.style.background = '';
+      el.userChipAvatar.style.color = '';
+    }
+  }
+
+  function setAuthorName(name) {
+    const clean = String(name || '').trim().slice(0, 50);
+    if (!clean) return;
+    authorName = clean;
+    localStorage.setItem(STORAGE_NAME_KEY, authorName);
+    updateUserChipUI();
+  }
+
+  updateUserChipUI();
+
+  // --- Teacher Mode Auth & UI ---
+  function updateTeacherUI() {
+    el.btnTeacherMode.classList.toggle('teacher-unlocked', state.isTeacher);
+    el.teacherBtnLabel.textContent = state.isTeacher ? 'Panel Profesor' : 'Profesor';
+    el.btnEditAssignmentInline.classList.toggle('hidden', !state.isTeacher);
+    el.timerTeacherControls.classList.toggle('hidden', !state.isTeacher);
+
+    // Point dedicated HTML Manual icon to the matching manual (Teacher vs User)
+    el.btnOpenManual.href = state.isTeacher ? '/manual-profesor.html' : '/manual-usuarios.html';
+    el.btnOpenManual.title = state.isTeacher
+      ? 'Abrir Manual del Profesor (HTML)'
+      : 'Abrir Manual de Usuarios (HTML)';
+    el.btnOpenManual.classList.toggle('is-teacher-manual', state.isTeacher);
+
+    renderSessionStatusBanner();
+    renderSessionsUI();
+    renderSessionPickerList();
+    renderScheduledTimersUI();
+    renderScreenQueue();
+    renderTopicBar();
+    if (window.PadletQuiz) {
+      window.PadletQuiz.onTeacherChanged(state.isTeacher);
+    }
+    // Refresh cards to show/hide teacher pin/review/screen controls without killing streams
+    state.posts.forEach((p) => {
+      const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(p.id)}"]`);
+      if (cardEl) patchCardInPlace(cardEl, p);
+    });
+  }
+
+  async function verifySavedTeacherToken() {
+    if (!state.teacherToken) return;
+    try {
+      const res = await fetch('/api/teacher/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: state.teacherToken }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        state.isTeacher = true;
+      } else {
+        state.teacherToken = '';
+        state.isTeacher = false;
+        sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
+      }
+      if (socket && socket.connected) {
+        socket.emit('client:register', { authorId, teacherToken: state.teacherToken });
+      }
+      updateTeacherUI();
+    } catch {}
+  }
+
+  verifySavedTeacherToken();
+
+  function setDefaultScheduleTime() {
+    const future = new Date(serverNow() + 10 * 60 * 1000);
+    const hh = String(future.getHours()).padStart(2, '0');
+    const mm = String(future.getMinutes()).padStart(2, '0');
+    el.scheduleTimeInput.value = `${hh}:${mm}`;
+  }
+
+  function switchTeacherTab(tabName) {
+    state.activeTeacherTab = tabName;
+    document.querySelectorAll('.teacher-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.teacherTab === tabName);
+    });
+    document.querySelectorAll('.teacher-tab-pane').forEach((pane) => {
+      pane.classList.toggle('hidden', pane.dataset.teacherPane !== tabName);
+    });
+    if (tabName === 'timers' && !el.scheduleTimeInput.value) {
+      setDefaultScheduleTime();
+    }
+    if (tabName === 'quizzes' && window.PadletQuiz) {
+      window.PadletQuiz.loadTeacherQuizzes();
+    }
+  }
+
+  document.querySelectorAll('.teacher-tab').forEach((btn) => {
+    btn.addEventListener('click', () => switchTeacherTab(btn.dataset.teacherTab));
+  });
+
+  function populateAssignmentForm(assignment) {
+    el.taskTitleInput.value = assignment?.title || '';
+    el.taskDueInput.value = assignment?.dueNote || '';
+    el.taskInstructionsInput.value = assignment?.instructions || '';
+    el.taskPinnedCheck.checked = assignment ? assignment.pinned !== false : true;
+    state.taskSelectedFile = null;
+    state.taskExistingImageUrl = assignment?.imageUrl || null;
+    state.taskExistingImageName = assignment?.imageName || null;
+    state.taskRemoveExistingImage = false;
+    el.taskImageInput.value = '';
+    showTaskImagePreview(assignment?.imageUrl || null);
+  }
+
+  function openTeacherPanel(tab = 'assignment') {
+    if (!state.isTeacher) {
+      state.pendingTeacherTab = tab;
+      el.inputTeacherPin.value = '';
+      el.teacherLoginError.classList.add('hidden');
+      openModal(el.teacherLoginModal);
+      el.inputTeacherPin.focus();
+      return;
+    }
+    populateAssignmentForm(state.assignment);
+    renderAssignmentHistory();
+    renderScheduledTimersUI();
+    renderSessionsUI();
+    setDefaultScheduleTime();
+    switchTeacherTab(tab);
+    openModal(el.teacherPanelModal);
+  }
+
+  el.btnTeacherMode.addEventListener('click', () => openTeacherPanel(state.activeTeacherTab || 'assignment'));
+  el.btnEditAssignmentInline.addEventListener('click', () => openTeacherPanel('assignment'));
+
+  el.teacherLoginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pin = el.inputTeacherPin.value.trim();
+    if (!pin) return;
+    el.teacherLoginError.classList.add('hidden');
+
+    try {
+      const res = await fetch('/api/teacher/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.token) {
+        el.teacherLoginError.textContent = data.error || 'PIN incorrecto.';
+        el.teacherLoginError.classList.remove('hidden');
+        el.inputTeacherPin.select();
+        return;
+      }
+
+      state.teacherToken = data.token;
+      state.isTeacher = true;
+      sessionStorage.setItem(STORAGE_TEACHER_TOKEN_KEY, data.token);
+      closeModal(el.teacherLoginModal);
+      socket.emit('client:register', { authorId, teacherToken: state.teacherToken });
+      updateTeacherUI();
+      showToast('Modo Profesor activado', 'success');
+      const targetTab = state.pendingTeacherTab || 'assignment';
+      state.pendingTeacherTab = null;
+      openTeacherPanel(targetTab);
+    } catch {
+      el.teacherLoginError.textContent = 'No se pudo verificar el PIN.';
+      el.teacherLoginError.classList.remove('hidden');
+    }
+  });
+
+  el.btnTeacherLogout.addEventListener('click', () => {
+    state.teacherToken = '';
+    state.isTeacher = false;
+    sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
+    closeModal(el.teacherPanelModal);
+    socket.emit('client:register', { authorId, teacherToken: '' });
+    updateTeacherUI();
+    showToast('Saliste del modo Profesor');
+  });
+
+  // --- Compact Click-to-Grow Tasks ("Temas de Tareas") ---
+  function getAllDisplayTasks() {
+    const items = [];
+    if (state.assignment && state.assignment.pinned) {
+      items.push({ ...state.assignment, isActive: true });
+    }
+    const hist = Array.isArray(state.assignmentHistory) ? state.assignmentHistory.slice(0, 8) : [];
+    hist.forEach((h) => items.push({ ...h, isActive: false }));
+    return items;
+  }
+
+  function getExpandedTask() {
+    if (!state.expandedTaskId) return null;
+    return getAllDisplayTasks().find((t) => t.id === state.expandedTaskId) || null;
+  }
+
+  function renderAssignmentBanner() {
+    const tasks = getAllDisplayTasks();
+    if (tasks.length === 0) {
+      el.assignmentSection.classList.add('hidden');
+      state.expandedTaskId = null;
+      return;
+    }
+
+    el.assignmentSection.classList.remove('hidden');
+    el.btnEditAssignmentInline.classList.toggle('hidden', !state.isTeacher);
+
+    // Render compact clickable mini-cards
+    el.tasksMiniGrid.innerHTML = tasks
+      .map((t) => {
+        const isSelected = state.expandedTaskId === t.id;
+        const preview = (t.instructions || '').replace(/\s+/g, ' ').trim();
+        return `
+          <button type="button" class="task-mini-card ${t.isActive ? 'is-active-task' : ''} ${
+            isSelected ? 'is-selected' : ''
+          }" data-task-id="${escapeHtml(t.id)}">
+            <div class="task-mini-top">
+              <span class="task-mini-tag">${t.isActive ? '📌 Activa' : '📄 Anterior'}</span>
+              ${t.dueNote ? `<span class="task-mini-due">${escapeHtml(t.dueNote)}</span>` : ''}
+            </div>
+            <div class="task-mini-title">${escapeHtml(t.title)}</div>
+            <div class="task-mini-preview">${escapeHtml(preview || (t.imageUrl ? '🖼️ Incluye imagen de referencia' : 'Sin descripción'))}</div>
+            <span class="task-mini-cta">${isSelected ? '▾ Abierta (clic para reducir)' : '🔍 Clic para ver completa'}</span>
+          </button>
+        `;
+      })
+      .join('');
+
+    // Render expanded panel only when user clicked a mini-card
+    const selected = getExpandedTask();
+    if (!selected) {
+      el.assignmentExpandedCard.classList.add('hidden');
+      return;
+    }
+
+    el.assignmentExpandedCard.classList.remove('hidden');
+    el.assignmentExpandedBadge.textContent = selected.isActive ? '📌 Tarea Activa' : '📄 Tarea Anterior';
+    el.assignmentTitle.textContent = selected.title;
+
+    if (selected.dueNote) {
+      el.assignmentDue.textContent = selected.dueNote;
+      el.assignmentDue.classList.remove('hidden');
+    } else {
+      el.assignmentDue.classList.add('hidden');
+    }
+
+    el.assignmentMeta.textContent = `${selected.updatedBy || 'Profesor'} · ${formatRelativeTime(selected.updatedAt)}`;
+    el.assignmentInstructions.innerHTML = selected.instructions
+      ? formatTextWithLinks(selected.instructions)
+      : '<em class="muted-note">Revisa la imagen de referencia adjunta.</em>';
+
+    if (selected.imageUrl) {
+      el.assignmentImage.src = selected.imageUrl;
+      el.assignmentImageWrap.classList.remove('hidden');
+    } else {
+      el.assignmentImage.src = '';
+      el.assignmentImageWrap.classList.add('hidden');
+    }
+  }
+
+  el.tasksMiniGrid.addEventListener('click', (e) => {
+    const card = e.target.closest('.task-mini-card');
+    if (!card) return;
+    const id = card.dataset.taskId;
+    state.expandedTaskId = state.expandedTaskId === id ? null : id;
+    renderAssignmentBanner();
+  });
+
+  el.btnToggleAssignment.addEventListener('click', () => {
+    state.expandedTaskId = null;
+    renderAssignmentBanner();
+  });
+
+  el.assignmentImageWrap.addEventListener('click', () => {
+    const task = getExpandedTask();
+    if (!task?.imageUrl) return;
+    el.lightboxImg.src = task.imageUrl;
+    el.lightboxCaption.textContent = `Tarea: ${task.title}`;
+    openModal(el.lightboxModal);
+  });
+
+  el.btnCopyAssignment.addEventListener('click', async () => {
+    const task = getExpandedTask();
+    if (!task) return;
+    const text = `${task.title}${task.dueNote ? ` (${task.dueNote})` : ''}\n\n${task.instructions || ''}`.trim();
+    try {
+      await copyTextToClipboard(text);
+      showToast('Instrucciones de la tarea copiadas', 'success');
+    } catch {
+      showToast('No se pudo copiar', 'error');
+    }
+  });
+
+  el.btnRespondAssignment.addEventListener('click', () => {
+    const task = getExpandedTask() || state.assignment;
+    applyWorkspaceView('padlets');
+    openComposerForCreate();
+    if (task?.title) {
+      el.inputTopic.value = task.title.slice(0, 100);
+      if (authorName) el.inputContent.focus();
+    }
+  });
+
+  function showTaskImagePreview(src) {
+    if (src) {
+      el.taskImagePreview.src = src;
+      el.taskImagePreviewBox.classList.remove('hidden');
+      el.taskDropzonePlaceholder.classList.add('hidden');
+    } else {
+      el.taskImagePreview.src = '';
+      el.taskImagePreviewBox.classList.add('hidden');
+      el.taskDropzonePlaceholder.classList.remove('hidden');
+    }
+  }
+
+  function handleTaskImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    if (file.size > 15 * 1024 * 1024) {
+      showToast('La imagen supera el límite de 15 MB', 'error');
+      return;
+    }
+    state.taskSelectedFile = file;
+    state.taskRemoveExistingImage = false;
+    const reader = new FileReader();
+    reader.onload = () => showTaskImagePreview(reader.result);
+    reader.readAsDataURL(file);
+  }
+
+  el.taskImageDropzone.addEventListener('click', (e) => {
+    if (e.target.closest('#btnRemoveTaskImage')) return;
+    el.taskImageInput.click();
+  });
+
+  el.taskImageInput.addEventListener('change', () => {
+    if (el.taskImageInput.files?.[0]) handleTaskImageFile(el.taskImageInput.files[0]);
+  });
+
+  el.taskImageDropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    el.taskImageDropzone.classList.add('dragover');
+  });
+
+  el.taskImageDropzone.addEventListener('dragleave', () => {
+    el.taskImageDropzone.classList.remove('dragover');
+  });
+
+  el.taskImageDropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.taskImageDropzone.classList.remove('dragover');
+    if (e.dataTransfer?.files?.[0]) handleTaskImageFile(e.dataTransfer.files[0]);
+  });
+
+  el.btnRemoveTaskImage.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.taskSelectedFile = null;
+    if (state.taskExistingImageUrl) state.taskRemoveExistingImage = true;
+    el.taskImageInput.value = '';
+    showTaskImagePreview(null);
+  });
+
+  function renderAssignmentHistory() {
+    const list = state.assignmentHistory || [];
+    if (list.length === 0) {
+      el.assignmentHistoryBox.classList.add('hidden');
+      return;
+    }
+    el.assignmentHistoryBox.classList.remove('hidden');
+    el.assignmentHistoryList.innerHTML = list
+      .map(
+        (item, idx) => `
+        <div class="history-item">
+          <div>
+            <strong>${escapeHtml(item.title)}</strong>
+            <div class="muted-note" style="font-size:0.74rem;">${formatRelativeTime(item.updatedAt)}</div>
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary" data-load-history="${idx}">Cargar</button>
+        </div>
+      `
+      )
+      .join('');
+  }
+
+  el.assignmentHistoryList.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-load-history]');
+    if (!btn) return;
+    const item = state.assignmentHistory[Number(btn.dataset.loadHistory)];
+    if (item) {
+      populateAssignmentForm(item);
+      showToast('Tarea cargada en el formulario');
+    }
+  });
+
+  async function uploadFile(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al subir la imagen.');
+    return data;
+  }
+
+  el.assignmentForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = el.taskTitleInput.value.trim();
+    const dueNote = el.taskDueInput.value.trim();
+    const instructions = el.taskInstructionsInput.value.trim();
+    if (!title) {
+      showToast('Ingresa el título de la tarea', 'error');
+      return;
+    }
+
+    el.btnSaveAssignment.disabled = true;
+    try {
+      let imageUrl = state.taskRemoveExistingImage ? null : state.taskExistingImageUrl;
+      let imageName = state.taskRemoveExistingImage ? null : state.taskExistingImageName;
+      if (state.taskSelectedFile) {
+        const uploaded = await uploadFile(state.taskSelectedFile);
+        imageUrl = uploaded.imageUrl;
+        imageName = uploaded.imageName;
+      }
+
+      const ack = await new Promise((resolve) => {
+        socket.emit(
+          'teacher:assignment:save',
+          {
+            teacherToken: state.teacherToken,
+            title,
+            dueNote,
+            instructions,
+            imageUrl,
+            imageName,
+            pinned: el.taskPinnedCheck.checked,
+            notifyAll: el.taskNotifyCheck.checked,
+            author: authorName || 'Profesor',
+          },
+          resolve
+        );
+      });
+
+      if (!ack?.ok) throw new Error(ack?.error || 'No se pudo publicar la tarea.');
+      state.expandedTaskId = null;
+      closeModal(el.teacherPanelModal);
+      showToast('Siguiente tarea publicada para todos', 'success');
+    } catch (err) {
+      showToast(err.message || 'Error al guardar la tarea', 'error');
+    } finally {
+      el.btnSaveAssignment.disabled = false;
+    }
+  });
+
+  el.btnClearAssignment.addEventListener('click', () => {
+    if (!state.assignment) return;
+    socket.emit('teacher:assignment:clear', { teacherToken: state.teacherToken }, (ack) => {
+      if (ack?.ok) {
+        populateAssignmentForm(null);
+        showToast('Tarea actual archivada y ocultada');
+      } else {
+        showToast(ack?.error || 'Error al quitar tarea', 'error');
+      }
+    });
+  });
+
+  // --- Teacher Notifications (Send + Receive + History) ---
+  document.querySelectorAll('.quick-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      el.notifyTitleInput.value = chip.dataset.quickTitle || 'Aviso del profesor';
+      el.notifyMessageInput.value = chip.dataset.quickMsg || '';
+      el.notifyTypeSelect.value = chip.dataset.quickType || 'info';
+      el.notifyMessageInput.focus();
+    });
+  });
+
+  el.notifyForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const title = el.notifyTitleInput.value.trim() || 'Aviso del profesor';
+    const message = el.notifyMessageInput.value.trim();
+    const type = el.notifyTypeSelect.value;
+    const sound = el.notifySoundCheck.checked;
+    if (!message) {
+      showToast('Escribe un mensaje para notificar', 'error');
+      return;
+    }
+
+    socket.emit(
+      'teacher:notify',
+      {
+        teacherToken: state.teacherToken,
+        title,
+        message,
+        type,
+        sound,
+        author: authorName || 'Profesor',
+      },
+      (ack) => {
+        if (ack?.ok) {
+          el.notifyMessageInput.value = '';
+          closeModal(el.teacherPanelModal);
+          showToast('Notificación enviada a todos', 'success');
+        } else {
+          showToast(ack?.error || 'No se pudo enviar la notificación', 'error');
+        }
+      }
+    );
+  });
+
+  function updateNotifBadge() {
+    if (state.unreadNotifications > 0) {
+      el.notifBadge.textContent = String(Math.min(99, state.unreadNotifications));
+      el.notifBadge.classList.remove('hidden');
+    } else {
+      el.notifBadge.classList.add('hidden');
+    }
+  }
+
+  function renderNotificationsList() {
+    if ('Notification' in window && Notification.permission === 'default' && window.isSecureContext) {
+      el.btnEnableBrowserNotif.classList.remove('hidden');
+    } else {
+      el.btnEnableBrowserNotif.classList.add('hidden');
+    }
+
+    if (state.notifications.length === 0) {
+      el.notificationsList.innerHTML = '<div class="muted-note">Aún no hay avisos del profesor.</div>';
+      return;
+    }
+
+    el.notificationsList.innerHTML = state.notifications
+      .map(
+        (n) => `
+        <div class="notif-history-item type-${escapeHtml(n.type || 'info')}">
+          <div class="announcement-head">
+            <strong class="announcement-title">${escapeHtml(n.title)}</strong>
+            <span class="announcement-foot">${formatRelativeTime(n.createdAt)}</span>
+          </div>
+          <div class="announcement-body">${formatTextWithLinks(n.message)}</div>
+          <div class="announcement-foot">Por ${escapeHtml(n.author || 'Profesor')}</div>
+        </div>
+      `
+      )
+      .join('');
+  }
+
+  function showLiveAnnouncement(n) {
+    const card = document.createElement('div');
+    card.className = `announcement-card type-${n.type || 'info'}`;
+    card.innerHTML = `
+      <div class="announcement-head">
+        <div class="announcement-title">${escapeHtml(n.title)}</div>
+        <button type="button" class="icon-btn-subtle" aria-label="Cerrar aviso">✕</button>
+      </div>
+      <div class="announcement-body">${formatTextWithLinks(n.message)}</div>
+      <div class="announcement-foot">${escapeHtml(n.author || 'Profesor')} · ahora</div>
+    `;
+
+    const dismiss = () => {
+      card.style.opacity = '0';
+      card.style.transition = 'opacity 0.25s ease';
+      setTimeout(() => card.remove(), 260);
+    };
+
+    card.querySelector('button').addEventListener('click', dismiss);
+    el.announcementStack.prepend(card);
+
+    // Keep max 3 stacked alerts visible
+    while (el.announcementStack.children.length > 3) {
+      el.announcementStack.lastElementChild.remove();
+    }
+
+    setTimeout(dismiss, 11000);
+
+    if (n.sound) {
+      playChime(n.type || 'info');
+    }
+
+    // Native browser notification when tab is hidden
+    if (
+      document.hidden &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      try {
+        new Notification(n.title, { body: n.message });
+      } catch {}
+    }
+  }
+
+  el.btnNotifications.addEventListener('click', () => {
+    state.unreadNotifications = 0;
+    updateNotifBadge();
+    renderNotificationsList();
+    openModal(el.notificationsModal);
+  });
+
+  el.btnEnableBrowserNotif.addEventListener('click', async () => {
+    if (!('Notification' in window)) return;
+    try {
+      const perm = await Notification.requestPermission();
+      renderNotificationsList();
+      if (perm === 'granted') {
+        showToast('Notificaciones del navegador activadas', 'success');
+      }
+    } catch {}
+  });
+
+  // --- Recess & Countdown Timers ---
+  document.querySelectorAll('.preset-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      el.timerDurationInput.value = btn.dataset.presetMin;
+    });
+  });
+
+  el.timerKindSelect.addEventListener('change', () => {
+    const val = el.timerLabelInput.value.trim();
+    if (el.timerKindSelect.value === 'recess' && (!val || val === 'Tiempo de actividad')) {
+      el.timerLabelInput.value = 'Receso';
+    } else if (el.timerKindSelect.value === 'activity' && (!val || val === 'Receso')) {
+      el.timerLabelInput.value = 'Tiempo de actividad';
+    }
+  });
+
+  el.btnStartTimerNow.addEventListener('click', () => {
+    const kind = el.timerKindSelect.value;
+    const label = el.timerLabelInput.value.trim() || (kind === 'recess' ? 'Receso' : 'Actividad');
+    const message = el.timerMessageInput.value.trim();
+    const durationMin = Number(el.timerDurationInput.value);
+
+    if (!Number.isFinite(durationMin) || durationMin <= 0) {
+      showToast('Ingresa una duración válida en minutos', 'error');
+      return;
+    }
+
+    socket.emit(
+      'teacher:timer:start',
+      {
+        teacherToken: state.teacherToken,
+        kind,
+        label,
+        message,
+        durationMin,
+        notifyAll: el.timerStartNotifyCheck.checked,
+        author: authorName || 'Profesor',
+      },
+      (ack) => {
+        if (ack?.ok) {
+          closeModal(el.teacherPanelModal);
+          showToast('Cuenta regresiva iniciada para todos', 'success');
+        } else {
+          showToast(ack?.error || 'No se pudo iniciar el temporizador', 'error');
+        }
+      }
+    );
+  });
+
+  el.btnScheduleTimer.addEventListener('click', () => {
+    const timeVal = el.scheduleTimeInput.value;
+    if (!timeVal || !timeVal.includes(':')) {
+      showToast('Selecciona una hora de inicio válida', 'error');
+      return;
+    }
+    const [hh, mm] = timeVal.split(':').map(Number);
+    const nowMs = serverNow();
+    const target = new Date(nowMs);
+    target.setHours(hh, mm, 0, 0);
+    // If chosen time is already in the past today, schedule for tomorrow
+    if (target.getTime() <= nowMs + 5000) {
+      target.setDate(target.getDate() + 1);
+    }
+
+    const kind = el.timerKindSelect.value;
+    const label = el.timerLabelInput.value.trim() || (kind === 'recess' ? 'Receso programado' : 'Actividad programada');
+    const message = el.timerMessageInput.value.trim();
+    const durationMin = Number(el.scheduleDurationInput.value);
+
+    socket.emit(
+      'teacher:timer:schedule',
+      {
+        teacherToken: state.teacherToken,
+        kind,
+        label,
+        message,
+        startAt: target.getTime(),
+        durationMin,
+        notifyAll: el.scheduleNotifyCheck.checked,
+        author: authorName || 'Profesor',
+      },
+      (ack) => {
+        if (ack?.ok) {
+          showToast(`Programado para las ${formatClockTime(target.getTime())}`, 'success');
+          renderScheduledTimersUI();
+        } else {
+          showToast(ack?.error || 'No se pudo programar el receso', 'error');
+        }
+      }
+    );
+  });
+
+  // Inline teacher timer controls
+  el.btnTimerPauseResume.addEventListener('click', () => {
+    if (!state.timer) return;
+    const event = state.timer.status === 'paused' ? 'teacher:timer:resume' : 'teacher:timer:pause';
+    socket.emit(event, { teacherToken: state.teacherToken });
+  });
+
+  el.btnTimerExtend.addEventListener('click', () => {
+    socket.emit('teacher:timer:extend', { teacherToken: state.teacherToken, extraMin: 5 });
+  });
+
+  el.btnTimerStop.addEventListener('click', () => {
+    socket.emit('teacher:timer:stop', { teacherToken: state.teacherToken });
+  });
+
+  // Projector fullscreen overlay
+  el.btnTimerProjector.addEventListener('click', () => {
+    if (!state.timer) return;
+    openModal(el.timerProjectorModal);
+    renderTimerTick();
+  });
+
+  el.btnCloseProjector.addEventListener('click', () => closeModal(el.timerProjectorModal));
+
+  function cancelScheduledTimer(id) {
+    socket.emit('teacher:timer:cancel-scheduled', { teacherToken: state.teacherToken, id }, (ack) => {
+      if (ack?.ok) showToast('Programación cancelada');
+    });
+  }
+
+  el.scheduledTimersStrip.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-cancel-scheduled]');
+    if (btn) cancelScheduledTimer(btn.dataset.cancelScheduled);
+  });
+
+  el.teacherScheduledList.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-cancel-scheduled]');
+    if (btn) cancelScheduledTimer(btn.dataset.cancelScheduled);
+  });
+
+  function renderScheduledTimersUI() {
+    const list = state.scheduledTimers || [];
+    const nowMs = serverNow();
+
+    if (list.length === 0) {
+      el.scheduledTimersStrip.classList.add('hidden');
+      el.scheduledTimersStrip.innerHTML = '';
+      el.teacherScheduledListBox.classList.add('hidden');
+      el.teacherScheduledList.innerHTML = '';
+      updateClassroomBarVisibility();
+      return;
+    }
+
+    el.scheduledTimersStrip.classList.remove('hidden');
+    el.scheduledTimersStrip.innerHTML = list
+      .map((st) => {
+        const diffSec = Math.max(0, Math.ceil((st.startAt - nowMs) / 1000));
+        const icon = st.kind === 'recess' ? '☕' : '⏱';
+        const mins = Math.round(st.durationSec / 60);
+        return `
+          <span class="scheduled-pill ${st.kind === 'activity' ? 'activity-pill' : ''}">
+            <span>${icon} <strong>${escapeHtml(st.label)}</strong> a las ${formatClockTime(st.startAt)} (${mins} min)</span>
+            <code>en ${formatCountdown(diffSec)}</code>
+            ${
+              state.isTeacher
+                ? `<button type="button" class="scheduled-cancel-btn" data-cancel-scheduled="${escapeHtml(st.id)}" title="Cancelar programación">✕</button>`
+                : ''
+            }
+          </span>
+        `;
+      })
+      .join('');
+
+    el.teacherScheduledListBox.classList.remove('hidden');
+    el.teacherScheduledList.innerHTML = list
+      .map((st) => {
+        const diffSec = Math.max(0, Math.ceil((st.startAt - nowMs) / 1000));
+        const mins = Math.round(st.durationSec / 60);
+        return `
+          <div class="history-item">
+            <div>
+              <strong>${st.kind === 'recess' ? '☕' : '⏱'} ${escapeHtml(st.label)}</strong>
+              <div class="muted-note" style="font-size:0.76rem;">Inicio: ${formatClockTime(st.startAt)} (en ${formatCountdown(diffSec)}) · Duración: ${mins} min</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-live" data-cancel-scheduled="${escapeHtml(st.id)}">Cancelar</button>
+          </div>
+        `;
+      })
+      .join('');
+
+    updateClassroomBarVisibility();
+  }
+
+  function updateClassroomBarVisibility() {
+    const hasActive = Boolean(state.timer);
+    const hasScheduled = (state.scheduledTimers || []).length > 0;
+    el.classroomBar.classList.toggle('hidden', !hasActive && !hasScheduled);
+  }
+
+  function renderTimerTick() {
+    const t = state.timer;
+    if (!t) {
+      el.activeTimerBanner.classList.add('hidden');
+      closeModal(el.timerProjectorModal);
+      renderScheduledTimersUI();
+      return;
+    }
+
+    el.activeTimerBanner.classList.remove('hidden');
+    el.activeTimerBanner.classList.toggle('timer-activity', t.kind === 'activity');
+    el.activeTimerBanner.classList.toggle('timer-paused', t.status === 'paused');
+    el.activeTimerBanner.classList.toggle('timer-finished', t.status === 'finished');
+
+    const nowMs = serverNow();
+    let remSec = 0;
+    if (t.status === 'running') {
+      remSec = Math.max(0, Math.ceil((t.endsAt - nowMs) / 1000));
+    } else if (t.status === 'paused') {
+      remSec = Math.max(0, t.remainingSec || 0);
+    } else {
+      remSec = 0;
+    }
+
+    const pct = t.durationSec > 0 ? Math.max(0, Math.min(100, (remSec / t.durationSec) * 100)) : 0;
+    const isRecess = t.kind === 'recess';
+    const badgeText =
+      t.status === 'finished'
+        ? '🔔 Finalizado'
+        : t.status === 'paused'
+        ? '⏸ En pausa'
+        : isRecess
+        ? '☕ Receso en curso'
+        : '⏱ Cuenta regresiva';
+
+    el.timerKindBadge.textContent = badgeText;
+    el.timerLabelText.textContent = t.label;
+    el.timerMessageText.textContent = t.message || '';
+    el.timerDigits.textContent = formatCountdown(remSec);
+    el.timerProgressFill.style.width = `${pct}%`;
+
+    if (t.status === 'running' && t.endsAt) {
+      el.timerReturnText.textContent = isRecess
+        ? `Volvemos a las ${formatClockTime(t.endsAt)}`
+        : `Finaliza a las ${formatClockTime(t.endsAt)}`;
+    } else if (t.status === 'paused') {
+      el.timerReturnText.textContent = 'Pausado por el profesor';
+    } else {
+      el.timerReturnText.textContent = '¡Tiempo cumplido!';
+    }
+
+    el.btnTimerPauseResume.textContent = t.status === 'paused' ? 'Reanudar' : 'Pausar';
+    el.btnTimerPauseResume.classList.toggle('hidden', t.status === 'finished');
+    el.timerTeacherControls.classList.toggle('hidden', !state.isTeacher);
+
+    // Sync Projector Overlay if visible
+    if (!el.timerProjectorModal.classList.contains('hidden')) {
+      el.projectorKindBadge.textContent = badgeText;
+      el.projectorLabel.textContent = t.label;
+      el.projectorDigits.textContent = formatCountdown(remSec);
+      el.projectorMessage.textContent = t.message || '';
+      el.projectorReturn.textContent = el.timerReturnText.textContent;
+      el.projectorProgressFill.style.width = `${pct}%`;
+    }
+
+    renderScheduledTimersUI();
+  }
+
+  setInterval(() => {
+    if (state.timer || (state.scheduledTimers && state.scheduledTimers.length > 0)) {
+      renderTimerTick();
+    }
+  }, 500);
+
+  // --- Server / Network Info ---
+  async function loadServerInfo() {
+    try {
+      const res = await fetch('/api/info');
+      if (!res.ok) return;
+      state.serverInfo = await res.json();
+
+      if (state.serverInfo.serverTime) {
+        state.serverOffsetMs = state.serverInfo.serverTime - Date.now();
+      }
+
+      const httpsPort = state.serverInfo.httpsPort || 3443;
+      const currentHost = window.location.hostname || state.serverInfo.primaryIP;
+      const directHttpsUrl = `https://${currentHost}:${httpsPort}`;
+
+      el.httpsSwitchLink.href = directHttpsUrl;
+      el.httpsRequiredUrl.textContent = directHttpsUrl;
+      el.httpsRequiredGoBtn.href = directHttpsUrl;
+
+      if (!window.isSecureContext && window.location.protocol === 'http:') {
+        el.httpsBanner.classList.remove('hidden');
+      }
+
+      el.lanHttpsUrl.textContent = state.serverInfo.httpsUrl;
+      el.lanHttpUrl.textContent = state.serverInfo.httpUrl;
+      el.qrCodeImg.src = state.serverInfo.qrHttps;
+
+      const others = (state.serverInfo.localIPs || []).slice(1);
+      if (others.length > 0) {
+        el.otherInterfacesBox.classList.remove('hidden');
+        el.otherInterfacesList.innerHTML = others
+          .map(
+            (iface) =>
+              `<li><strong>${escapeHtml(iface.interfaceName)}:</strong> <code>https://${escapeHtml(
+                iface.address
+              )}:${httpsPort}</code></li>`
+          )
+          .join('');
+      } else {
+        el.otherInterfacesBox.classList.add('hidden');
+      }
+    } catch (err) {
+      console.warn('No se pudo obtener /api/info:', err);
+    }
+  }
+
+  loadServerInfo();
+
+  el.btnDismissHttpsBanner.addEventListener('click', () => {
+    el.httpsBanner.classList.add('hidden');
+  });
+
+  document.querySelectorAll('[data-copy-target]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const target = document.getElementById(btn.dataset.copyTarget);
+      if (!target) return;
+      try {
+        await copyTextToClipboard(target.textContent.trim());
+        showToast('Enlace copiado al portapapeles', 'success');
+      } catch {
+        showToast('No se pudo copiar automáticamente', 'error');
+      }
+    });
+  });
+
+  // --- Socket.IO & WebRTC Setup ---
+  const socket = io();
+
+  const screenManager = new window.ScreenShareManager(socket, {
+    onStreamReady(postId, stream, isLocal) {
+      const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(postId)}"]`);
+      if (!cardEl) return;
+      attachVideoUI(cardEl, postId, stream, isLocal);
+    },
+    onStreamStopped(postId) {
+      const post = state.posts.find((p) => p.id === postId);
+      if (post) {
+        post.screenShare = null;
+      }
+      refreshCard(postId);
+      renderTopicBar();
+    },
+    onConnectionState(postId, connState) {
+      const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(postId)}"]`);
+      if (!cardEl) return;
+      const statusOverlay = cardEl.querySelector('.screen-status-center');
+      if (!statusOverlay) return;
+
+      if (connState === 'connected') {
+        statusOverlay.classList.add('hidden');
+      } else if (connState === 'failed' || connState === 'disconnected') {
+        statusOverlay.classList.remove('hidden');
+        const msg = statusOverlay.querySelector('.screen-status-msg');
+        if (msg) msg.textContent = 'Conexión de video interrumpida';
+      }
+    },
+  });
+
+  socket.on('connect', () => {
+    state.socketId = socket.id;
+    el.connectionDot.classList.remove('offline');
+    socket.emit('client:register', { authorId, teacherToken: state.teacherToken });
+  });
+
+  socket.on('disconnect', () => {
+    el.connectionDot.classList.add('offline');
+  });
+
+  function sortPostsInPlace() {
+    state.posts.sort((a, b) => {
+      if (Boolean(b.pinned) !== Boolean(a.pinned)) {
+        return b.pinned ? 1 : -1;
+      }
+      const orderA = typeof a.order === 'number' ? a.order : 0;
+      const orderB = typeof b.order === 'number' ? b.order : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }
+
+  function isScreenPost(post) {
+    return post?.kind === 'screen';
+  }
+
+  function getPadletPosts() {
+    return state.posts.filter((p) => !isScreenPost(p));
+  }
+
+  function getScreenPosts() {
+    return state.posts
+      .filter((p) => isScreenPost(p))
+      .sort((a, b) => {
+        const aLive = a.screenShare?.active ? 1 : 0;
+        const bLive = b.screenShare?.active ? 1 : 0;
+        if (bLive !== aLive) return bLive - aLive;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+  }
+
+  function updateWorkspaceTabBadges() {
+    const padletsCount = getPadletPosts().length;
+    const liveScreens = state.posts.filter((p) => p.screenShare?.active).length;
+    const queueLen = (state.screenQueue || []).length;
+
+    el.tabPadletsCount.textContent = String(padletsCount);
+
+    if (liveScreens > 0) {
+      el.tabScreensLiveBadge.textContent = `${liveScreens} en vivo`;
+      el.tabScreensLiveBadge.classList.remove('hidden');
+    } else {
+      el.tabScreensLiveBadge.classList.add('hidden');
+    }
+
+    if (queueLen > 0) {
+      el.tabQueueBadge.textContent = `${queueLen} en cola`;
+      el.tabQueueBadge.classList.remove('hidden');
+    } else {
+      el.tabQueueBadge.classList.add('hidden');
+    }
+
+    el.screensCountLabel.textContent =
+      liveScreens === 1 ? '1 pantalla en vivo' : `${liveScreens} pantallas en vivo`;
+  }
+
+  function applyWorkspaceView(view) {
+    const valid = view === 'screens' || view === 'both' ? view : 'padlets';
+    state.workspaceView = valid;
+    localStorage.setItem('padletlocal_workspace_view', valid);
+
+    el.workspaceTabs.querySelectorAll('.workspace-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.workspaceView === valid);
+    });
+
+    el.padletsSection.classList.toggle('hidden', valid === 'screens');
+    el.screensSection.classList.toggle('hidden', valid === 'padlets');
+  }
+
+  el.workspaceTabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('.workspace-tab');
+    if (!btn) return;
+    applyWorkspaceView(btn.dataset.workspaceView);
+  });
+
+  function renderScreenQueue() {
+    const queue = state.screenQueue || [];
+    el.btnClearQueue.classList.toggle('hidden', !state.isTeacher || queue.length === 0);
+    el.queueCountLabel.textContent =
+      queue.length === 0
+        ? 'Nadie en espera'
+        : queue.length === 1
+        ? '1 persona en espera'
+        : `${queue.length} personas en espera`;
+
+    if (queue.length === 0) {
+      el.screenQueueList.innerHTML =
+        '<div class="queue-empty">No hay usuarios en cola. Haz clic en <strong>+ Pedir turno</strong> para solicitar compartir tu pantalla.</div>';
+      updateWorkspaceTabBadges();
+      return;
+    }
+
+    el.screenQueueList.innerHTML = queue
+      .map((item, idx) => {
+        const isMine = item.authorId === authorId;
+        const isCalled = item.status === 'called';
+        return `
+          <div class="queue-item ${isMine ? 'is-mine' : ''} ${isCalled ? 'is-called' : ''}" data-queue-id="${escapeHtml(item.id)}">
+            <div class="queue-item-top">
+              <div class="queue-person">
+                <span class="queue-pos">${idx + 1}</span>
+                <span class="queue-name">${escapeHtml(item.author)}${isMine ? ' (Tú)' : ''}</span>
+              </div>
+              <span class="post-time">${formatRelativeTime(item.createdAt)}</span>
+            </div>
+            <div class="queue-reason"><strong>Motivo:</strong> ${escapeHtml(item.reason)}</div>
+            <div class="queue-item-actions">
+              <span class="queue-status-tag">${isCalled ? '▶ Turno asignado' : '⏳ En espera'}</span>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                ${
+                  state.isTeacher
+                    ? `<button type="button" class="btn btn-sm btn-primary" data-queue-action="call" title="Dar paso a este usuario para compartir pantalla">▶ Dar turno</button>
+                       <button type="button" class="btn btn-sm btn-ghost" data-queue-action="remove" title="Quitar de la cola">✕</button>`
+                    : ''
+                }
+                ${
+                  isMine
+                    ? `<button type="button" class="btn btn-sm btn-secondary" data-queue-action="leave">Salir</button>`
+                    : ''
+                }
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    updateWorkspaceTabBadges();
+  }
+
+  el.screenQueueList.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-queue-action]');
+    if (!btn) return;
+    const itemEl = btn.closest('.queue-item');
+    if (!itemEl) return;
+    const id = itemEl.dataset.queueId;
+    const action = btn.dataset.queueAction;
+
+    if (action === 'leave') {
+      socket.emit('screen-queue:leave', { id, authorId }, () => {
+        showToast('Saliste de la cola de compartidos');
+      });
+    } else if (action === 'call') {
+      socket.emit(
+        'teacher:screen-queue:call',
+        { id, teacherToken: state.teacherToken, teacherName: authorName || 'Profesor' },
+        (res) => {
+          if (!res?.ok) showToast(res?.error || 'No se pudo dar turno', 'error');
+          else showToast(`▶ Turno enviado a ${res.entry?.author || 'el usuario'}`, 'success');
+        }
+      );
+    } else if (action === 'remove') {
+      socket.emit('teacher:screen-queue:remove', { id, teacherToken: state.teacherToken });
+    }
+  });
+
+  el.btnClearQueue.addEventListener('click', () => {
+    if (!window.confirm('¿Limpiar toda la cola de compartidos?')) return;
+    socket.emit('teacher:screen-queue:clear', { teacherToken: state.teacherToken });
+  });
+
+  function renderScreensGrid() {
+    const screens = getScreenPosts();
+    el.screensGrid.innerHTML = '';
+
+    if (screens.length === 0) {
+      el.screensEmptyState.classList.remove('hidden');
+      updateWorkspaceTabBadges();
+      return;
+    }
+
+    el.screensEmptyState.classList.add('hidden');
+    const fragment = document.createDocumentFragment();
+    screens.forEach((post) => {
+      fragment.appendChild(buildCardElement(post));
+    });
+    el.screensGrid.appendChild(fragment);
+
+    screens.forEach((post) => {
+      if (post.screenShare?.active) {
+        const cardEl = el.screensGrid.querySelector(`.card[data-post-id="${CSS.escape(post.id)}"]`);
+        if (cardEl) syncCardStream(cardEl, post);
+      }
+    });
+
+    updateWorkspaceTabBadges();
+  }
+
+  // --- Multi-Session Class Management, Session Picker & Clean/Reset Controls ---
+  function renderSessionStatusBanner() {
+    const hasSession = Boolean(state.activeSessionId);
+    const isPublished = state.sessionStatus?.isPublished !== false;
+    const isClosed = Boolean(state.sessionStatus?.isClosed);
+    const readOnlyForMe = !state.isTeacher && (!hasSession || isClosed || !isPublished);
+
+    // Disable creation controls for students if session is closed or no session selected
+    [
+      el.btnNewPost,
+      el.fabNewPost,
+      el.btnOpenScreenModal,
+      el.btnEasyPublish,
+      el.btnEasyShare,
+      el.btnQueueJoinQuick,
+      el.btnShareScreenFromTab,
+    ].forEach((btn) => {
+      if (btn) btn.disabled = readOnlyForMe;
+    });
+
+    if (!hasSession) {
+      el.sessionStatusBanner.classList.remove('hidden', 'is-unpublished');
+      el.sessionStatusText.textContent = '📚 No hay ninguna sesión seleccionada o habilitada en este momento.';
+      el.sessionStatusActions.innerHTML = `<button type="button" class="btn btn-sm btn-primary" data-status-banner-action="pick">Elegir sesión</button>`;
+      return;
+    }
+
+    if (!isPublished && state.isTeacher) {
+      el.sessionStatusBanner.classList.remove('hidden');
+      el.sessionStatusBanner.classList.add('is-unpublished');
+      el.sessionStatusText.textContent =
+        '👁️‍🗨️ Esta sesión está despublicada (borrador privado — los alumnos no pueden verla ni entrar).';
+      el.sessionStatusActions.innerHTML = `<button type="button" class="btn btn-sm btn-primary" data-status-banner-action="publish">📢 Publicar para alumnos</button>`;
+      return;
+    }
+
+    if (isClosed) {
+      el.sessionStatusBanner.classList.remove('hidden', 'is-unpublished');
+      el.sessionStatusText.textContent = state.isTeacher
+        ? '🔒 Sesión cerrada (los alumnos solo pueden leer; no pueden publicar ni compartir pantalla).'
+        : '🔒 Esta sesión fue cerrada por el profesor (solo lectura).';
+      el.sessionStatusActions.innerHTML = state.isTeacher
+        ? `<button type="button" class="btn btn-sm btn-primary" data-status-banner-action="reopen">🔓 Abrir sesión</button>`
+        : `<button type="button" class="btn btn-sm btn-secondary" data-status-banner-action="pick">Cambiar de sesión</button>`;
+      return;
+    }
+
+    el.sessionStatusBanner.classList.add('hidden');
+  }
+
+  el.sessionStatusActions.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-status-banner-action]');
+    if (!btn) return;
+    const action = btn.dataset.statusBannerAction;
+    if (action === 'pick') {
+      openSessionPicker({ required: !state.activeSessionId });
+    } else if (action === 'publish') {
+      socket.emit(
+        'teacher:session:set-status',
+        { teacherToken: state.teacherToken, sessionId: state.activeSessionId, isPublished: true },
+        (ack) => {
+          if (ack?.ok) showToast('📢 Sesión habilitada para todos los alumnos', 'success');
+        }
+      );
+    } else if (action === 'reopen') {
+      socket.emit(
+        'teacher:session:set-status',
+        { teacherToken: state.teacherToken, sessionId: state.activeSessionId, isClosed: false },
+        (ack) => {
+          if (ack?.ok) showToast('🔓 Sesión reabierta para recibir respuestas', 'success');
+        }
+      );
+    }
+  });
+
+  function renderSessionPickerList() {
+    const sessions = state.sessions || [];
+    el.btnPickerTeacherLogin.classList.toggle('hidden', state.isTeacher);
+    el.btnPickerManageSessions.classList.toggle('hidden', !state.isTeacher);
+    el.sessionPickerIntro.textContent = state.isTeacher
+      ? 'Como profesor ves todas las sesiones (habilitadas, despublicadas y cerradas). Elige en cuál trabajar:'
+      : 'Elige una de las sesiones habilitadas por el profesor para entrar:';
+
+    if (sessions.length === 0) {
+      el.sessionPickerList.innerHTML = `<div class="queue-empty">El profesor aún no ha habilitado ninguna sesión de clase.<br/>Espera un momento o pregunta al profesor.</div>`;
+      return;
+    }
+
+    el.sessionPickerList.innerHTML = sessions
+      .map((s) => {
+        const isCurrent = s.id === state.activeSessionId;
+        const isPub = s.isPublished !== false;
+        const isClosed = Boolean(s.isClosed);
+        return `
+          <div class="session-picker-card ${isCurrent ? 'is-current' : ''} ${!isPub ? 'is-unpublished' : ''}" data-pick-session-id="${escapeHtml(s.id)}">
+            <div class="session-item-info">
+              <div class="session-item-title-row">
+                <strong>${escapeHtml(s.name)}</strong>
+                ${isCurrent ? '<span class="session-active-tag">Aquí estás</span>' : ''}
+                ${isPub ? '<span class="session-tag-pub">🟢 Habilitada</span>' : '<span class="session-tag-unpub">👁️‍🗨️ Despublicada</span>'}
+                ${isClosed ? '<span class="session-tag-closed">🔒 Cerrada</span>' : ''}
+              </div>
+              ${s.description ? `<div class="session-item-meta">${escapeHtml(s.description)}</div>` : ''}
+              <div class="session-item-meta">
+                ${s.padletCount} ${s.padletCount === 1 ? 'Padlet' : 'Padlets'}
+                ${s.screenCount > 0 ? ` · ${s.screenCount} pantallas` : ''}
+                ${s.quizCount > 0 ? ` · ${s.quizCount} tests` : ''}
+              </div>
+            </div>
+            <button type="button" class="btn btn-sm ${isCurrent ? 'btn-secondary' : 'btn-primary'}" data-pick-enter="${escapeHtml(s.id)}">
+              ${isCurrent ? 'Continuar aquí' : '▶ Entrar'}
+            </button>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  function openSessionPicker({ required = false } = {}) {
+    renderSessionPickerList();
+    el.btnCloseSessionPicker.classList.toggle('hidden', required && !state.activeSessionId);
+    openModal(el.sessionPickerModal);
+  }
+
+  el.sessionPickerList.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-pick-enter]');
+    if (!btn) return;
+    const sessionId = btn.dataset.pickEnter;
+    state.hasChosenSession = true;
+
+    if (sessionId === state.activeSessionId) {
+      closeModal(el.sessionPickerModal);
+      return;
+    }
+
+    btn.disabled = true;
+    socket.emit(
+      'session:join',
+      { sessionId, teacherToken: state.teacherToken },
+      (ack) => {
+        btn.disabled = false;
+        if (!ack?.ok) {
+          showToast(ack?.error || 'No se pudo entrar a esa sesión', 'error');
+          return;
+        }
+        closeModal(el.sessionPickerModal);
+        showToast(`📚 Entraste a "${ack.snapshot?.board?.title || 'la sesión'}"`, 'success');
+      }
+    );
+  });
+
+  el.btnPickerTeacherLogin.addEventListener('click', () => {
+    closeModal(el.sessionPickerModal);
+    openTeacherPanel('sessions');
+  });
+
+  el.btnPickerManageSessions.addEventListener('click', () => {
+    closeModal(el.sessionPickerModal);
+    openTeacherPanel('sessions');
+  });
+
+  function renderSessionsUI() {
+    const sessions = state.sessions || [];
+    el.sessionsCountNum.textContent = String(sessions.length);
+
+    // Show session switcher pill in header for everyone so users/teachers can choose/switch sessions anytime
+    el.activeSessionBadge.classList.remove('hidden');
+    el.activeSessionBadge.textContent =
+      sessions.length > 1 ? `📚 Cambiar sesión (${sessions.length})` : '📚 Sesiones';
+    el.activeSessionBadge.title = 'Elegir o cambiar de sesión de clase';
+
+    if (sessions.length === 0) {
+      el.sessionsList.innerHTML = '<div class="muted-note">Sin sesiones registradas.</div>';
+      return;
+    }
+
+    el.sessionsList.innerHTML = sessions
+      .map((s) => {
+        const isCurrent = s.id === state.activeSessionId;
+        const isPub = s.isPublished !== false;
+        const isClosed = Boolean(s.isClosed);
+        return `
+          <div class="session-item ${isCurrent ? 'is-active' : ''} ${!isPub ? 'is-unpublished' : ''}" data-session-id="${escapeHtml(s.id)}">
+            <div class="session-item-info">
+              <div class="session-item-title-row">
+                <strong>${escapeHtml(s.name)}</strong>
+                ${isCurrent ? '<span class="session-active-tag">Actual</span>' : ''}
+                ${isPub ? '<span class="session-tag-pub">Habilitada</span>' : '<span class="session-tag-unpub">Despublicada</span>'}
+                ${isClosed ? '<span class="session-tag-closed">Cerrada</span>' : ''}
+              </div>
+              <div class="session-item-meta">
+                ${s.padletCount} ${s.padletCount === 1 ? 'Padlet' : 'Padlets'}
+                ${s.screenCount > 0 ? ` · ${s.screenCount} pantallas` : ''}
+                ${s.hiddenCount > 0 ? ` · ${s.hiddenCount} ocultos` : ''}
+                ${s.quizCount > 0 ? ` · ${s.quizCount} tests` : ''}
+                · creada ${formatRelativeTime(s.createdAt)}
+              </div>
+            </div>
+            <div class="session-item-actions">
+              ${
+                !isCurrent
+                  ? `<button type="button" class="btn btn-sm btn-primary" data-session-action="switch">▶ Entrar</button>`
+                  : ''
+              }
+              <button type="button" class="btn btn-sm btn-secondary" data-session-action="toggle-publish" title="${
+                isPub ? 'Despublicar (ocultar para los alumnos)' : 'Publicar / habilitar para los alumnos'
+              }">${isPub ? '👁️‍🗨️ Despublicar' : '📢 Publicar'}</button>
+              <button type="button" class="btn btn-sm btn-secondary" data-session-action="toggle-close" title="${
+                isClosed ? 'Volver a abrir para recibir respuestas' : 'Cerrar sesión (solo lectura para alumnos)'
+              }">${isClosed ? '🔓 Abrir' : '🔒 Cerrar'}</button>
+              <button type="button" class="btn btn-sm btn-secondary" data-session-action="rename" title="Renombrar sesión">✏️</button>
+              <button type="button" class="btn btn-sm btn-live" data-session-action="delete" title="Eliminar sesión de clase">🗑️</button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  el.activeSessionBadge.addEventListener('click', () => {
+    openSessionPicker({ required: false });
+  });
+
+  el.createSessionForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = el.newSessionNameInput.value.trim();
+    const description = el.newSessionDescInput.value.trim();
+    const isPublished = el.newSessionPublishCheck.checked;
+    const activate = el.newSessionActivateCheck.checked;
+    if (!name) {
+      showToast('Escribe un nombre para la nueva sesión de clase', 'error');
+      return;
+    }
+
+    el.btnCreateSession.disabled = true;
+    socket.emit(
+      'teacher:session:create',
+      { teacherToken: state.teacherToken, name, description, isPublished, activate },
+      (ack) => {
+        el.btnCreateSession.disabled = false;
+        if (!ack?.ok) {
+          showToast(ack?.error || 'No se pudo crear la sesión', 'error');
+          return;
+        }
+        el.newSessionNameInput.value = '';
+        el.newSessionDescInput.value = '';
+        if (activate) {
+          state.hasChosenSession = true;
+          closeModal(el.teacherPanelModal);
+          showToast(
+            isPublished
+              ? `Nueva sesión habilitada: "${name}"`
+              : `Nueva sesión privada (despublicada): "${name}"`,
+            'success'
+          );
+        } else {
+          showToast(`Sesión "${name}" creada`, 'success');
+        }
+      }
+    );
+  });
+
+  el.sessionsList.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-session-action]');
+    if (!btn) return;
+    const itemEl = btn.closest('.session-item');
+    if (!itemEl) return;
+    const sessionId = itemEl.dataset.sessionId;
+    const session = (state.sessions || []).find((s) => s.id === sessionId);
+    const action = btn.dataset.sessionAction;
+
+    if (action === 'switch') {
+      state.hasChosenSession = true;
+      socket.emit('teacher:session:switch', { teacherToken: state.teacherToken, sessionId }, (ack) => {
+        if (!ack?.ok) showToast(ack?.error || 'No se pudo cambiar de sesión', 'error');
+        else {
+          closeModal(el.teacherPanelModal);
+          showToast(`Entraste a la sesión "${session?.name || ''}"`, 'success');
+        }
+      });
+    } else if (action === 'toggle-publish') {
+      const nextPub = !(session?.isPublished !== false);
+      if (
+        !nextPub &&
+        !window.confirm(
+          `¿Despublicar la sesión "${session?.name || ''}"?\n\nDejará de estar visible para los alumnos y quienes estén dentro pasarán al selector de sesiones habilitadas.`
+        )
+      ) {
+        return;
+      }
+      socket.emit(
+        'teacher:session:set-status',
+        { teacherToken: state.teacherToken, sessionId, isPublished: nextPub },
+        (ack) => {
+          if (!ack?.ok) showToast(ack?.error || 'No se pudo actualizar', 'error');
+          else showToast(nextPub ? '📢 Sesión publicada y habilitada' : '👁️‍🗨️ Sesión despublicada (oculta para alumnos)', 'success');
+        }
+      );
+    } else if (action === 'toggle-close') {
+      const nextClosed = !Boolean(session?.isClosed);
+      socket.emit(
+        'teacher:session:set-status',
+        { teacherToken: state.teacherToken, sessionId, isClosed: nextClosed },
+        (ack) => {
+          if (!ack?.ok) showToast(ack?.error || 'No se pudo actualizar', 'error');
+          else showToast(nextClosed ? '🔒 Sesión cerrada (solo lectura para alumnos)' : '🔓 Sesión abierta nuevamente', 'success');
+        }
+      );
+    } else if (action === 'rename') {
+      const nextName = window.prompt('Nuevo nombre para esta sesión de clase:', session?.name || '');
+      if (!nextName || !nextName.trim()) return;
+      socket.emit(
+        'teacher:session:rename',
+        { teacherToken: state.teacherToken, sessionId, name: nextName.trim() },
+        (ack) => {
+          if (!ack?.ok) showToast(ack?.error || 'No se pudo renombrar', 'error');
+          else showToast('Sesión renombrada', 'success');
+        }
+      );
+    } else if (action === 'delete') {
+      const msg =
+        state.sessions.length <= 1
+          ? `¿Eliminar la sesión "${session?.name || ''}"? Se borrarán todas sus publicaciones e imágenes y se creará una sesión nueva en blanco.`
+          : `¿Eliminar permanentemente la sesión "${session?.name || ''}" y todas sus publicaciones e imágenes?`;
+      if (!window.confirm(msg)) return;
+      socket.emit('teacher:session:delete', { teacherToken: state.teacherToken, sessionId }, (ack) => {
+        if (!ack?.ok) showToast(ack?.error || 'No se pudo eliminar la sesión', 'error');
+        else showToast('Sesión eliminada', 'success');
+      });
+    }
+  });
+
+  el.btnClearSessionPosts.addEventListener('click', () => {
+    const ok = window.confirm(
+      `¿Limpiar TODAS las respuestas (Padlets y Pantallas) de "${state.board.title}"?\n\nSe conservarán los Temas de Tareas y el título de la sesión.`
+    );
+    if (!ok) return;
+    socket.emit('teacher:session:clear-posts', { teacherToken: state.teacherToken }, (ack) => {
+      if (!ack?.ok) showToast(ack?.error || 'No se pudo limpiar el panel', 'error');
+      else {
+        closeModal(el.teacherPanelModal);
+        showToast('🧹 Respuestas limpiadas correctamente', 'success');
+      }
+    });
+  });
+
+  el.btnResetSessionFull.addEventListener('click', () => {
+    const ok = window.confirm(
+      `¿Reiniciar POR COMPLETO la sesión "${state.board.title}"?\n\nSe eliminarán todas las respuestas, imágenes, tareas, avisos y temporizadores de esta sesión.`
+    );
+    if (!ok) return;
+    socket.emit('teacher:session:reset', { teacherToken: state.teacherToken }, (ack) => {
+      if (!ack?.ok) showToast(ack?.error || 'No se pudo reiniciar la sesión', 'error');
+      else {
+        closeModal(el.teacherPanelModal);
+        showToast('🔄 Sesión reiniciada desde cero', 'success');
+      }
+    });
+  });
+
+  function applySessionSnapshot(data, { isSessionChange = false } = {}) {
+    if (data.socketId) state.socketId = data.socketId;
+    if (data.serverTime) {
+      state.serverOffsetMs = data.serverTime - Date.now();
+    }
+    if (isSessionChange) {
+      screenManager.stopAll();
+      state.activeTopic = '__ALL__';
+      state.expandedTaskId = null;
+      state.focusedCardId = null;
+      state.expandedCards.clear();
+      state.openComments.clear();
+      state.unreadNotifications = 0;
+      updateNotifBadge();
+    }
+
+    state.activeSessionId = data.sessionId !== undefined ? data.sessionId : data.activeSessionId || null;
+    state.sessionStatus = data.sessionStatus || { isPublished: true, isClosed: false };
+    if (Array.isArray(data.sessions)) {
+      state.sessions = data.sessions;
+    }
+    state.board = data.board || state.board;
+    state.posts = Array.isArray(data.posts) ? data.posts : [];
+    sortPostsInPlace();
+
+    state.assignment = data.assignment || null;
+    state.assignmentHistory = Array.isArray(data.assignmentHistory) ? data.assignmentHistory : [];
+    state.notifications = Array.isArray(data.notifications) ? data.notifications : [];
+    state.timer = data.timer || null;
+    state.scheduledTimers = Array.isArray(data.scheduledTimers) ? data.scheduledTimers : [];
+    state.screenQueue = Array.isArray(data.screenQueue) ? data.screenQueue : [];
+
+    renderBoardMeta();
+    renderSessionStatusBanner();
+    renderSessionsUI();
+    renderSessionPickerList();
+    renderAssignmentBanner();
+    renderAssignmentHistory();
+    renderTimerTick();
+    renderScreenQueue();
+    if (data.onlineCount) el.onlineCount.textContent = String(data.onlineCount);
+    renderTopicBar();
+    renderBoardFull();
+    renderScreensGrid();
+    applyWorkspaceView(state.workspaceView);
+    if (window.PadletQuiz) {
+      window.PadletQuiz.onSessionSnapshot(data);
+    }
+
+    state.posts.forEach((post) => {
+      if (post.screenShare?.active && post.screenShare.sharerSocketId !== state.socketId) {
+        screenManager.watchScreen(post.id, post.screenShare.sharerSocketId);
+      }
+    });
+  }
+
+  socket.on('board:init', (data) => {
+    applySessionSnapshot(data, { isSessionChange: false });
+    // Let user or teacher pick which session to work in upon entering
+    if (!state.hasChosenSession) {
+      openSessionPicker({ required: !state.activeSessionId });
+    }
+  });
+
+  socket.on('session:synced', (data) => {
+    applySessionSnapshot(data, { isSessionChange: true });
+    if (data.reasonMessage) {
+      showToast(`📚 ${data.reasonMessage}`, 'info');
+    }
+  });
+
+  socket.on('session:status-changed', ({ sessionId, isPublished, isClosed }) => {
+    if (sessionId !== state.activeSessionId) return;
+    state.sessionStatus = { isPublished: isPublished !== false, isClosed: Boolean(isClosed) };
+    renderSessionStatusBanner();
+  });
+
+  socket.on('session:unavailable', ({ reason, sessions }) => {
+    screenManager.stopAll();
+    state.activeSessionId = null;
+    state.hasChosenSession = false;
+    if (Array.isArray(sessions)) state.sessions = sessions;
+    state.posts = [];
+    state.assignment = null;
+    state.assignmentHistory = [];
+    state.timer = null;
+    state.scheduledTimers = [];
+    state.screenQueue = [];
+    renderSessionStatusBanner();
+    renderSessionsUI();
+    renderAssignmentBanner();
+    renderTimerTick();
+    renderScreenQueue();
+    renderTopicBar();
+    renderBoardFull();
+    renderScreensGrid();
+    showToast(reason || 'Esta sesión ya no está disponible.', 'info');
+    openSessionPicker({ required: true });
+  });
+
+  socket.on('sessions:updated', ({ sessions }) => {
+    if (Array.isArray(sessions)) state.sessions = sessions;
+    const cur = (state.sessions || []).find((s) => s.id === state.activeSessionId);
+    if (cur) {
+      state.sessionStatus = { isPublished: cur.isPublished !== false, isClosed: Boolean(cur.isClosed) };
+    }
+    renderSessionStatusBanner();
+    renderSessionsUI();
+    renderSessionPickerList();
+  });
+
+  socket.on('screen-queue:updated', ({ queue }) => {
+    state.screenQueue = Array.isArray(queue) ? queue : [];
+    renderScreenQueue();
+  });
+
+  socket.on('screen:turn-granted', ({ queueId, author, reason, teacherName }) => {
+    state.pendingResumePostId = null;
+    state.pendingTurnGrant = { queueId, author, reason };
+    el.resumeScreenText.innerHTML = `<strong>${escapeHtml(
+      teacherName || 'El profesor'
+    )}</strong> te dio turno para compartir tu pantalla.<br/><br/><strong>Motivo:</strong> ${escapeHtml(
+      reason || 'Presentación'
+    )}`;
+    el.btnAcceptResumeScreen.textContent = '▶ Compartir pantalla ahora';
+    playChime('recess');
+    openModal(el.resumeScreenModal);
+  });
+
+  socket.on('board:updated', (board) => {
+    state.board = board;
+    renderBoardMeta();
+  });
+
+  socket.on('presence:count', ({ count }) => {
+    el.onlineCount.textContent = String(count || 1);
+  });
+
+  socket.on('assignment:updated', ({ assignment, assignmentHistory }) => {
+    state.assignment = assignment || null;
+    if (Array.isArray(assignmentHistory)) {
+      state.assignmentHistory = assignmentHistory;
+    }
+    // Keep compact by default so user clicks to grow
+    if (state.expandedTaskId && !getExpandedTask()) {
+      state.expandedTaskId = null;
+    }
+    renderAssignmentBanner();
+    renderAssignmentHistory();
+  });
+
+  socket.on('notification:new', (notification) => {
+    if (!notification) return;
+    state.notifications.unshift(notification);
+    state.notifications = state.notifications.slice(0, 25);
+
+    if (el.notificationsModal.classList.contains('hidden')) {
+      state.unreadNotifications++;
+      updateNotifBadge();
+    } else {
+      renderNotificationsList();
+    }
+
+    showLiveAnnouncement(notification);
+  });
+
+  socket.on('timer:updated', ({ timer, scheduledTimers, serverTime }) => {
+    if (serverTime) {
+      state.serverOffsetMs = serverTime - Date.now();
+    }
+    state.timer = timer || null;
+    state.scheduledTimers = Array.isArray(scheduledTimers) ? scheduledTimers : [];
+    renderTimerTick();
+  });
+
+  socket.on('timer:finished', ({ timer, serverTime }) => {
+    if (serverTime) {
+      state.serverOffsetMs = serverTime - Date.now();
+    }
+    if (timer) state.timer = timer;
+    renderTimerTick();
+  });
+
+  socket.on('post:created', (post) => {
+    if (state.posts.some((p) => p.id === post.id)) return;
+    state.posts.unshift(post);
+    sortPostsInPlace();
+
+    if (isScreenPost(post)) {
+      el.screensEmptyState.classList.add('hidden');
+      const cardEl = buildCardElement(post);
+      el.screensGrid.prepend(cardEl);
+      syncCardStream(cardEl, post);
+      updateWorkspaceTabBadges();
+      return;
+    }
+
+    renderTopicBar();
+    if (matchesCurrentFilters(post)) {
+      el.emptyState.classList.add('hidden');
+      const cardEl = buildCardElement(post);
+      const firstUnpinned = el.boardGrid.querySelector('.card:not(.card-pinned)');
+      if (!post.pinned && firstUnpinned) {
+        el.boardGrid.insertBefore(cardEl, firstUnpinned);
+      } else {
+        el.boardGrid.prepend(cardEl);
+      }
+      syncCardStream(cardEl, post);
+    }
+    updatePostCounter();
+    updateWorkspaceTabBadges();
+  });
+
+  socket.on('post:updated', (updatedPost) => {
+    const idx = state.posts.findIndex((p) => p.id === updatedPost.id);
+    if (idx === -1) return;
+    const pinnedChanged = Boolean(state.posts[idx].pinned) !== Boolean(updatedPost.pinned);
+    state.posts[idx] = updatedPost;
+    if (pinnedChanged) sortPostsInPlace();
+
+    if (isScreenPost(updatedPost)) {
+      const existingCard = el.screensGrid.querySelector(`.card[data-post-id="${CSS.escape(updatedPost.id)}"]`);
+      if (existingCard) patchCardInPlace(existingCard, updatedPost);
+      else renderScreensGrid();
+      updateWorkspaceTabBadges();
+      return;
+    }
+
+    renderTopicBar();
+
+    if (pinnedChanged) {
+      renderBoardFull();
+      return;
+    }
+
+    const existingCard = el.boardGrid.querySelector(`.card[data-post-id="${CSS.escape(updatedPost.id)}"]`);
+    const shouldShow = matchesCurrentFilters(updatedPost);
+
+    if (shouldShow && existingCard) {
+      patchCardInPlace(existingCard, updatedPost);
+    } else if (shouldShow && !existingCard) {
+      renderBoardFull();
+    } else if (!shouldShow && existingCard) {
+      existingCard.remove();
+      updateEmptyAndCounter();
+    }
+  });
+
+  socket.on('posts:reordered', ({ sessionId, postIds }) => {
+    if (sessionId && sessionId !== state.activeSessionId) return;
+    if (!Array.isArray(postIds)) return;
+    postIds.forEach((id, idx) => {
+      const p = state.posts.find((item) => item.id === id);
+      if (p) p.order = idx + 1;
+    });
+    sortPostsInPlace();
+    renderBoardFull();
+    renderScreensGrid();
+  });
+
+  socket.on('post:deleted', ({ id }) => {
+    const deleted = state.posts.find((p) => p.id === id);
+    state.posts = state.posts.filter((p) => p.id !== id);
+    screenManager.handleRemoteShareStopped(id);
+    const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(id)}"]`);
+    if (cardEl) cardEl.remove();
+
+    if (deleted && isScreenPost(deleted)) {
+      if (getScreenPosts().length === 0) {
+        el.screensEmptyState.classList.remove('hidden');
+      }
+      updateWorkspaceTabBadges();
+      return;
+    }
+
+    renderTopicBar();
+    updateEmptyAndCounter();
+    updateWorkspaceTabBadges();
+  });
+
+  socket.on('screen:started', ({ postId, sharerSocketId, sharerAuthorId, sharerName, pausedByTeacher, viewerCount }) => {
+    const post = state.posts.find((p) => p.id === postId);
+    if (!post) return;
+    post.screenShare = {
+      active: true,
+      sharerSocketId,
+      sharerAuthorId,
+      sharerName,
+      pausedByTeacher: Boolean(pausedByTeacher),
+      viewerCount: viewerCount || 0,
+    };
+
+    renderTopicBar();
+    refreshCard(postId);
+    updateWorkspaceTabBadges();
+
+    if (sharerSocketId !== socket.id) {
+      screenManager.watchScreen(postId, sharerSocketId);
+      showToast(`🖥️ ${sharerName} está compartiendo su pantalla ("${post.topic}")`);
+    }
+  });
+
+  socket.on('screen:paused', ({ postId, paused, teacherName }) => {
+    const post = state.posts.find((p) => p.id === postId);
+    if (!post || !post.screenShare) return;
+    post.screenShare.pausedByTeacher = Boolean(paused);
+
+    if (screenManager.isPresenting(postId)) {
+      screenManager.setTeacherPaused(postId, Boolean(paused));
+      showToast(
+        paused
+          ? `✂ ${teacherName || 'El profesor'} cortó temporalmente tu pantalla compartida`
+          : `▶ ${teacherName || 'El profesor'} retomó tu pantalla compartida`,
+        paused ? 'info' : 'success'
+      );
+      playChime(paused ? 'warning' : 'info');
+    }
+
+    refreshCard(postId);
+  });
+
+  socket.on('screen:force-stop', ({ postId, teacherName }) => {
+    screenManager.forceStopByTeacher(postId);
+    playChime('warning');
+    showToast(`✂ ${teacherName || 'El profesor'} finalizó tu pantalla compartida`, 'info');
+  });
+
+  socket.on('screen:resume-requested', ({ postId, topic, teacherName }) => {
+    state.pendingTurnGrant = null;
+    state.pendingResumePostId = postId;
+    el.resumeScreenText.innerHTML = `<strong>${escapeHtml(
+      teacherName || 'El profesor'
+    )}</strong> te pide retomar tu pantalla compartida en la tarjeta <strong>"${escapeHtml(
+      topic || 'Tu tarjeta'
+    )}"</strong>.`;
+    el.btnAcceptResumeScreen.textContent = '▶ Retomar pantalla ahora';
+    playChime('task');
+    openModal(el.resumeScreenModal);
+  });
+
+  socket.on('screen:viewers', ({ postId, viewerCount }) => {
+    const post = state.posts.find((p) => p.id === postId);
+    if (!post || !post.screenShare) return;
+    post.screenShare.viewerCount = viewerCount;
+
+    const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(postId)}"]`);
+    if (cardEl) {
+      const badge = cardEl.querySelector('.viewer-count-num');
+      if (badge) badge.textContent = String(viewerCount);
+    }
+  });
+
+  socket.on('screen:stopped', ({ postId }) => {
+    const post = state.posts.find((p) => p.id === postId);
+    if (post) {
+      post.screenShare = null;
+    }
+    screenManager.handleRemoteShareStopped(postId);
+    renderTopicBar();
+    refreshCard(postId);
+    updateWorkspaceTabBadges();
+  });
+
+  // --- Board Meta & Filters (Padlets Section) ---
+  function renderBoardMeta() {
+    el.boardTitle.textContent = state.board.title || 'PadletLocal';
+    el.boardDescription.textContent = state.board.description || '';
+    document.title = `${state.board.title || 'PadletLocal'} — Panel Colaborativo`;
+  }
+
+  function matchesCurrentFilters(post) {
+    if (isScreenPost(post)) return false;
+
+    if (state.activeTopic === '__HIGHLIGHTED__') {
+      if (!post.highlighted) return false;
+    } else if (state.activeTopic === '__REVIEWED__') {
+      if (!post.reviewed) return false;
+    } else if (state.activeTopic === '__UNREVIEWED__') {
+      if (post.reviewed) return false;
+    } else if (state.activeTopic !== '__ALL__') {
+      if (post.topic.toLowerCase() !== state.activeTopic.toLowerCase()) return false;
+    }
+
+    const q = state.searchQuery.trim().toLowerCase();
+    if (q) {
+      const haystack = `${post.author} ${post.topic} ${post.content}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+
+    return true;
+  }
+
+  function renderTopicBar() {
+    const padlets = getPadletPosts();
+    const topicCounts = new Map();
+    let reviewedCount = 0;
+    let highlightedCount = 0;
+
+    padlets.forEach((p) => {
+      if (p.reviewed) reviewedCount++;
+      if (p.highlighted) highlightedCount++;
+      const key = p.topic.trim();
+      if (!key) return;
+      const lower = key.toLowerCase();
+      const prev = topicCounts.get(lower);
+      if (prev) {
+        prev.count++;
+      } else {
+        topicCounts.set(lower, { label: key, count: 1 });
+      }
+    });
+
+    const unreviewedCount = padlets.length - reviewedCount;
+
+    el.topicSuggestions.innerHTML = Array.from(topicCounts.values())
+      .map((t) => `<option value="${escapeHtml(t.label)}"></option>`)
+      .join('');
+
+    if (
+      state.activeTopic !== '__ALL__' &&
+      state.activeTopic !== '__HIGHLIGHTED__' &&
+      state.activeTopic !== '__REVIEWED__' &&
+      state.activeTopic !== '__UNREVIEWED__' &&
+      !topicCounts.has(state.activeTopic.toLowerCase())
+    ) {
+      state.activeTopic = '__ALL__';
+    }
+
+    const pills = [];
+    pills.push(
+      `<button type="button" class="topic-pill ${state.activeTopic === '__ALL__' ? 'active' : ''}" data-topic="__ALL__">Todos <span class="pill-count">${padlets.length}</span></button>`
+    );
+
+    if (padlets.length > 0 && (state.isTeacher || highlightedCount > 0)) {
+      pills.push(
+        `<button type="button" class="topic-pill ${state.activeTopic === '__HIGHLIGHTED__' ? 'active' : ''}" data-topic="__HIGHLIGHTED__">⭐ Destacadas <span class="pill-count">${highlightedCount}</span></button>`
+      );
+    }
+
+    if (padlets.length > 0 && (state.isTeacher || reviewedCount > 0)) {
+      pills.push(
+        `<button type="button" class="topic-pill ${state.activeTopic === '__UNREVIEWED__' ? 'active' : ''}" data-topic="__UNREVIEWED__">Pendientes <span class="pill-count">${unreviewedCount}</span></button>`
+      );
+      pills.push(
+        `<button type="button" class="topic-pill ${state.activeTopic === '__REVIEWED__' ? 'active' : ''}" data-topic="__REVIEWED__">✓ Revisadas <span class="pill-count">${reviewedCount}</span></button>`
+      );
+    }
+
+    for (const { label, count } of topicCounts.values()) {
+      const isActive =
+        state.activeTopic !== '__ALL__' &&
+        state.activeTopic !== '__HIGHLIGHTED__' &&
+        state.activeTopic !== '__REVIEWED__' &&
+        state.activeTopic !== '__UNREVIEWED__' &&
+        state.activeTopic.toLowerCase() === label.toLowerCase();
+      pills.push(
+        `<button type="button" class="topic-pill ${isActive ? 'active' : ''}" data-topic="${escapeHtml(label)}">${escapeHtml(label)} <span class="pill-count">${count}</span></button>`
+      );
+    }
+
+    el.topicBar.innerHTML = pills.join('');
+    el.topicBar.querySelectorAll('.topic-pill').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.activeTopic = btn.dataset.topic;
+        renderTopicBar();
+        renderBoardFull();
+      });
+    });
+  }
+
+  function updateBoardDensity(visibleCount) {
+    const count =
+      typeof visibleCount === 'number' ? visibleCount : getPadletPosts().filter(matchesCurrentFilters).length;
+    const isCompact =
+      state.densityMode === 'compact' ||
+      (state.densityMode === 'auto' && count >= AUTO_COMPACT_THRESHOLD);
+
+    el.boardGrid.classList.toggle('board-grid--compact', isCompact);
+    el.compactHint.classList.toggle('hidden', !isCompact || count === 0);
+
+    if (!isCompact && state.focusedCardId) {
+      state.focusedCardId = null;
+      el.boardGrid.querySelectorAll('.card.card-focused').forEach((c) => c.classList.remove('card-focused'));
+    }
+
+    el.densityControl.querySelectorAll('.density-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.density === state.densityMode);
+    });
+  }
+
+  function updatePostCounter() {
+    const padlets = getPadletPosts();
+    const visible = padlets.filter(matchesCurrentFilters).length;
+    const total = padlets.length;
+    if (visible === total) {
+      el.postCounter.textContent = `${total} ${total === 1 ? 'Padlet' : 'Padlets'}`;
+    } else {
+      el.postCounter.textContent = `Mostrando ${visible} de ${total}`;
+    }
+    updateBoardDensity(visible);
+    updateWorkspaceTabBadges();
+  }
+
+  function updateEmptyAndCounter() {
+    updatePostCounter();
+    const visibleCount = el.boardGrid.children.length;
+    const totalPadlets = getPadletPosts().length;
+    if (totalPadlets === 0) {
+      el.emptyState.classList.remove('hidden');
+    } else {
+      el.emptyState.classList.add('hidden');
+      if (visibleCount === 0) {
+        el.boardGrid.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1; margin: 24px auto;"><h2>Sin resultados</h2><p>No hay publicaciones que coincidan con tu filtro o búsqueda actual.</p></div>`;
+      }
+    }
+  }
+
+  // --- Card Rendering & Video-Safe Patching ---
+  function buildScreenPausedOverlayHTML(post) {
+    if (!post.screenShare?.active || !post.screenShare.pausedByTeacher) return '';
+    return `
+      <div class="screen-paused-overlay">
+        <strong>✂ Pantalla cortada por el profesor</strong>
+        <span>${
+          state.isTeacher
+            ? 'Puedes retomar la transmisión al instante o finalizarla.'
+            : 'El profesor pausó temporalmente esta pantalla compartida.'
+        }</span>
+        ${
+          state.isTeacher
+            ? `<div class="screen-controls-group">
+                 <button type="button" class="screen-ctrl-btn resume-btn" data-action="teacher-resume-screen">▶ Retomar pantalla</button>
+                 <button type="button" class="screen-ctrl-btn danger" data-action="teacher-stop-screen">✕ Terminar</button>
+               </div>`
+            : ''
+        }
+      </div>
+    `;
+  }
+
+  function buildScreenTeacherBtnsHTML(post) {
+    if (!state.isTeacher || !post.screenShare?.active) return '';
+    const isPaused = Boolean(post.screenShare.pausedByTeacher);
+    return isPaused
+      ? `<button type="button" class="screen-ctrl-btn resume-btn" data-action="teacher-resume-screen" title="Retomar pantalla compartida">▶ Retomar</button>`
+      : `<button type="button" class="screen-ctrl-btn danger" data-action="teacher-pause-screen" title="Cortar pantalla compartida temporalmente">✂ Cortar</button>`;
+  }
+
+  function buildScreenStageHTML(post) {
+    if (!post.screenShare?.active) return '';
+    const isPresenter = screenManager.isPresenting(post.id) || post.screenShare.sharerSocketId === socket.id;
+    const isExpanded = state.expandedCards.has(post.id);
+    const hasStream = Boolean(screenManager.getStream(post.id));
+    const isPaused = Boolean(post.screenShare.pausedByTeacher);
+
+    return `
+      <div class="screen-stage" data-screen-post-id="${escapeHtml(post.id)}">
+        <video autoplay playsinline muted></video>
+        <div class="screen-paused-slot">${buildScreenPausedOverlayHTML(post)}</div>
+
+        <div class="screen-overlay-top">
+          <span class="live-badge">${isPaused ? '⏸ PAUSADA' : '<span class="live-dot"></span> EN VIVO'}</span>
+          <span class="viewer-badge" title="Espectadores conectados">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span class="viewer-count-num">${post.screenShare.viewerCount || 0}</span>
+          </span>
+        </div>
+
+        <div class="screen-status-center ${hasStream ? 'hidden' : ''}">
+          <span class="screen-status-msg">${isPresenter ? 'Iniciando transmisión...' : 'Conectando pantalla compartida...'}</span>
+          ${
+            !isPresenter
+              ? `<button type="button" class="screen-ctrl-btn" data-action="reconnect-screen">Reconectar</button>`
+              : ''
+          }
+        </div>
+
+        <div class="screen-overlay-bottom">
+          <div class="screen-controls-group">
+            ${
+              isPresenter
+                ? `<button type="button" class="screen-ctrl-btn danger" data-action="stop-screen">■ Detener</button>`
+                : `<button type="button" class="screen-ctrl-btn hidden" data-action="toggle-mute" title="Activar/silenciar audio">🔇 Audio</button>`
+            }
+            <span class="screen-teacher-slot">${buildScreenTeacherBtnsHTML(post)}</span>
+          </div>
+          <div class="screen-controls-group">
+            <button type="button" class="screen-ctrl-btn advanced-only" data-action="toggle-expand" title="Ampliar o reducir tarjeta">${
+              isExpanded ? '⤡ Reducir' : '⤢ Ampliar'
+            }</button>
+            ${
+              document.pictureInPictureEnabled
+                ? `<button type="button" class="screen-ctrl-btn advanced-only" data-action="pip-screen" title="Imagen en imagen">PiP</button>`
+                : ''
+            }
+            <button type="button" class="screen-ctrl-btn" data-action="fullscreen-screen" title="Pantalla completa">⛶ Ver grande</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildCommentsHTML(post) {
+    const isOpen = state.openComments.has(post.id);
+    if (!isOpen) return '';
+    const comments = Array.isArray(post.comments) ? post.comments : [];
+    const listHtml =
+      comments.length === 0
+        ? `<div class="muted-note" style="font-size:0.78rem;">Aún no hay comentarios. ¡Sé el primero!</div>`
+        : comments
+            .map(
+              (c) => `
+          <div class="comment-item">
+            <div class="comment-head">
+              <span class="comment-author">${escapeHtml(c.author)}</span>
+              <span class="comment-time">${formatRelativeTime(c.createdAt)}</span>
+            </div>
+            <div class="comment-text">${formatTextWithLinks(c.text)}</div>
+          </div>
+        `
+            )
+            .join('');
+
+    return `
+      <div class="card-comments">
+        <div class="comments-list">${listHtml}</div>
+        <form class="comment-form" data-action="submit-comment">
+          <input type="text" name="commentText" maxlength="500" placeholder="Escribe un comentario..." autocomplete="off" required />
+          <button type="submit" class="btn btn-sm btn-primary">Enviar</button>
+        </form>
+      </div>
+    `;
+  }
+
+  function buildCardInnerParts(post) {
+    const isOwner = post.authorId === authorId;
+    const canManage = isOwner || state.isTeacher;
+    const isLive = Boolean(post.screenShare?.active);
+    const isPresenter = screenManager.isPresenting(post.id) || (isLive && post.screenShare.sharerSocketId === socket.id);
+    const likes = Array.isArray(post.likes) ? post.likes : [];
+    const isLiked = likes.includes(authorId);
+    const commentsCount = Array.isArray(post.comments) ? post.comments.length : 0;
+
+    const pinButton = state.isTeacher
+      ? `<button type="button" class="icon-btn-subtle" data-action="pin-post" title="${
+          post.pinned ? 'Quitar fijado' : 'Fijar tarjeta arriba'
+        }" aria-label="Fijar tarjeta">${post.pinned ? '📌' : '📍'}</button>`
+      : '';
+
+    const hideButton = state.isTeacher
+      ? `<button type="button" class="icon-btn-subtle hide-post-btn" data-action="hide-post" title="${
+          post.isHidden ? 'Republicar tarjeta (hacer visible a alumnos)' : 'Despublicar / ocultar tarjeta a alumnos'
+        }" aria-label="Despublicar o republicar tarjeta">${post.isHidden ? '👁️' : '🚫'}</button>`
+      : '';
+
+    const highlightButton = `<button type="button" class="icon-btn-subtle highlight-post-btn ${
+      post.highlighted ? 'is-highlighted' : ''
+    }" data-action="highlight-post" title="${
+      post.highlighted ? 'Quitar destacado' : 'Destacar esta respuesta (⭐)'
+    }" aria-label="Destacar tarjeta">${post.highlighted ? '⭐' : '☆'}</button>`;
+
+    const ownerButtons = canManage
+      ? `
+        <div class="card-owner-actions">
+          ${pinButton}
+          ${hideButton}
+          <button type="button" class="icon-btn-subtle" data-action="edit-post" title="Editar tarjeta" aria-label="Editar tarjeta">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </button>
+          <button type="button" class="icon-btn-subtle" data-action="delete-post" title="Eliminar tarjeta" aria-label="Eliminar tarjeta">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+          </button>
+        </div>
+      `
+      : '';
+
+    const isPausedByTeacher = Boolean(isLive && post.screenShare.pausedByTeacher);
+
+    const isScreenCard = isScreenPost(post);
+
+    const shareFooterBtn = isPresenter
+      ? `<button type="button" class="action-chip stop-share-btn" data-action="stop-screen">■ Detener pantalla</button>`
+      : state.isTeacher && isLive && !isPausedByTeacher
+      ? `<button type="button" class="action-chip stop-share-btn" data-action="teacher-pause-screen" title="Cortar esta pantalla compartida">✂ Cortar pantalla</button>`
+      : state.isTeacher && isLive && isPausedByTeacher
+      ? `<button type="button" class="action-chip share-btn" data-action="teacher-resume-screen" title="Retomar esta pantalla compartida">▶ Retomar pantalla</button>`
+      : isOwner && isScreenCard && !isLive
+      ? `<button type="button" class="action-chip share-btn" data-action="start-screen" title="Volver a compartir tu pantalla aquí">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+             <rect x="2" y="3" width="20" height="14" rx="2" />
+             <line x1="8" y1="21" x2="16" y2="21" />
+             <line x1="12" y1="17" x2="12" y2="21" />
+           </svg>
+           Retomar mi pantalla
+         </button>`
+      : state.isTeacher && isScreenCard && !isLive
+      ? `<button type="button" class="action-chip teacher-request-screen-btn" data-action="teacher-request-screen" title="Pedir al autor que retome su pantalla">🖥️ Pedir retomar</button>`
+      : '';
+
+    const reviewBtn = state.isTeacher
+      ? `<button type="button" class="action-chip review-btn ${post.reviewed ? 'is-reviewed' : ''}" data-action="review-post" title="${
+          post.reviewed ? 'Quitar visto de revisada' : 'Marcar esta respuesta como revisada / ya vista'
+        }">${post.reviewed ? '✓✓ Revisada' : '✓ Revisar'}</button>`
+      : '';
+
+    const reviewedBadge = post.reviewed
+      ? `<span class="reviewed-badge" title="Revisada por ${escapeHtml(post.reviewedBy || 'Profesor')}${
+          post.reviewedAt ? ' · ' + formatRelativeTime(post.reviewedAt) : ''
+        }">✓✓ Revisada</span>`
+      : '';
+
+    return {
+      headerHtml: `
+        <div class="card-author-block">
+          <span class="drag-handle" title="Arrastra para mover de lugar esta respuesta" aria-label="Mover tarjeta">⠿</span>
+          <div class="avatar" style="background:${getAvatarColor(post.authorId || post.author)}">${escapeHtml(getInitials(post.author))}</div>
+          <div class="author-meta">
+            <div class="author-name">
+              ${escapeHtml(post.author)}
+              ${isOwner ? '<span class="you-tag">Tú</span>' : ''}
+            </div>
+            <div class="post-time">${formatRelativeTime(post.createdAt)}${post.updatedAt ? ' · editado' : ''}</div>
+          </div>
+        </div>
+        <div class="card-owner-actions">
+          ${highlightButton}
+          <button type="button" class="icon-btn-subtle compact-shrink-btn" data-action="shrink-card" title="Volver al tamaño pequeño">⤡</button>
+          ${ownerButtons}
+        </div>
+      `,
+      textHtml: `
+        <div class="card-topic-row">
+          <h3 class="card-topic">${escapeHtml(post.topic)}</h3>
+          <div class="card-badges-row" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+            ${post.highlighted ? '<span class="highlighted-tag" title="Respuesta destacada">⭐ Destacada</span>' : ''}
+            ${post.isHidden ? '<span class="hidden-tag" title="Despublicada para los alumnos">🚫 Despublicada</span>' : ''}
+            ${reviewedBadge}
+            ${post.pinned ? '<span class="pinned-tag">📌 Fijado</span>' : ''}
+          </div>
+        </div>
+        ${
+          post.imageUrl
+            ? `<div class="card-image-wrap" data-action="open-lightbox" data-img-src="${escapeHtml(post.imageUrl)}" data-img-caption="${escapeHtml(post.topic)} — ${escapeHtml(post.author)}">
+                 <img src="${escapeHtml(post.imageUrl)}" alt="${escapeHtml(post.topic)}" loading="lazy" />
+               </div>`
+            : ''
+        }
+        ${post.content ? `<p class="card-content">${formatTextWithLinks(post.content)}</p>` : ''}
+        <span class="compact-grow-hint">🔍 Clic para ver más grande</span>
+      `,
+      footerHtml: `
+        <div class="card-footer-left">
+          <button type="button" class="action-chip ${isLiked ? 'liked' : ''}" data-action="like-post" title="Me gusta">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="${isLiked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            <span>${likes.length}</span>
+          </button>
+          <button type="button" class="action-chip" data-action="toggle-comments" title="Comentarios">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span>${commentsCount}</span>
+          </button>
+          ${reviewBtn}
+        </div>
+        <div class="card-footer-right">
+          ${shareFooterBtn}
+        </div>
+      `,
+      commentsHtml: buildCommentsHTML(post),
+    };
+  }
+
+  function buildCardElement(post) {
+    const article = document.createElement('article');
+    article.className = 'card';
+    article.setAttribute('draggable', 'true');
+    article.dataset.postId = post.id;
+    article.dataset.color = post.color || 'default';
+    if (post.screenShare?.active) article.classList.add('is-live');
+    if (post.pinned) article.classList.add('card-pinned');
+    if (post.highlighted) article.classList.add('card-highlighted');
+    if (post.reviewed) article.classList.add('card-reviewed');
+    if (post.isHidden) article.classList.add('card-hidden');
+    if (state.expandedCards.has(post.id)) article.classList.add('card-expanded');
+    if (state.focusedCardId === post.id) article.classList.add('card-focused');
+
+    const parts = buildCardInnerParts(post);
+    article.innerHTML = `
+      <div class="card-accent"></div>
+      <div class="card-header">${parts.headerHtml}</div>
+      <div class="card-body">
+        <div class="card-screen-slot">${buildScreenStageHTML(post)}</div>
+        <div class="card-text-slot">${parts.textHtml}</div>
+      </div>
+      <div class="card-footer">${parts.footerHtml}</div>
+      <div class="card-comments-slot">${parts.commentsHtml}</div>
+    `;
+
+    return article;
+  }
+
+  function patchCardInPlace(cardEl, post) {
+    cardEl.dataset.color = post.color || 'default';
+    cardEl.classList.toggle('is-live', Boolean(post.screenShare?.active));
+    cardEl.classList.toggle('card-pinned', Boolean(post.pinned));
+    cardEl.classList.toggle('card-highlighted', Boolean(post.highlighted));
+    cardEl.classList.toggle('card-reviewed', Boolean(post.reviewed));
+    cardEl.classList.toggle('card-hidden', Boolean(post.isHidden));
+    cardEl.classList.toggle('card-expanded', state.expandedCards.has(post.id));
+    cardEl.classList.toggle('card-focused', state.focusedCardId === post.id);
+    cardEl.classList.toggle('card-hidden', Boolean(post.isHidden));
+    cardEl.classList.toggle('card-expanded', state.expandedCards.has(post.id));
+    cardEl.classList.toggle('card-focused', state.focusedCardId === post.id);
+
+    const parts = buildCardInnerParts(post);
+    cardEl.querySelector('.card-header').innerHTML = parts.headerHtml;
+    cardEl.querySelector('.card-text-slot').innerHTML = parts.textHtml;
+    cardEl.querySelector('.card-footer').innerHTML = parts.footerHtml;
+    cardEl.querySelector('.card-comments-slot').innerHTML = parts.commentsHtml;
+
+    const screenSlot = cardEl.querySelector('.card-screen-slot');
+    const hasStageNow = Boolean(screenSlot.querySelector('.screen-stage'));
+    const shouldHaveStage = Boolean(post.screenShare?.active);
+
+    if (shouldHaveStage && !hasStageNow) {
+      screenSlot.innerHTML = buildScreenStageHTML(post);
+      syncCardStream(cardEl, post);
+    } else if (!shouldHaveStage && hasStageNow) {
+      screenSlot.innerHTML = '';
+    } else if (shouldHaveStage && hasStageNow) {
+      const pausedSlot = screenSlot.querySelector('.screen-paused-slot');
+      if (pausedSlot) pausedSlot.innerHTML = buildScreenPausedOverlayHTML(post);
+      const teacherSlot = screenSlot.querySelector('.screen-teacher-slot');
+      if (teacherSlot) teacherSlot.innerHTML = buildScreenTeacherBtnsHTML(post);
+      const liveBadge = screenSlot.querySelector('.live-badge');
+      if (liveBadge) {
+        liveBadge.innerHTML = post.screenShare.pausedByTeacher
+          ? '⏸ PAUSADA'
+          : '<span class="live-dot"></span> EN VIVO';
+      }
+      const numEl = screenSlot.querySelector('.viewer-count-num');
+      if (numEl) numEl.textContent = String(post.screenShare.viewerCount || 0);
+      const expBtn = screenSlot.querySelector('[data-action="toggle-expand"]');
+      if (expBtn) expBtn.textContent = state.expandedCards.has(post.id) ? '⤡ Reducir' : '⤢ Ampliar';
+      syncCardStream(cardEl, post);
+    }
+  }
+
+  function refreshCard(postId) {
+    const post = state.posts.find((p) => p.id === postId);
+    const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(postId)}"]`);
+    if (!post) {
+      if (cardEl) cardEl.remove();
+      return;
+    }
+
+    if (isScreenPost(post)) {
+      if (cardEl) patchCardInPlace(cardEl, post);
+      else renderScreensGrid();
+      return;
+    }
+
+    const shouldShow = matchesCurrentFilters(post);
+    if (shouldShow && cardEl) {
+      patchCardInPlace(cardEl, post);
+    } else if (shouldShow && !cardEl) {
+      renderBoardFull();
+    } else if (!shouldShow && cardEl) {
+      cardEl.remove();
+      updateEmptyAndCounter();
+    }
+  }
+
+  function attachVideoUI(cardEl, postId, stream, isLocal) {
+    const videoEl = cardEl.querySelector('.screen-stage video');
+    if (!videoEl) return;
+    screenManager.attachStreamToVideo(postId, videoEl);
+
+    const statusOverlay = cardEl.querySelector('.screen-status-center');
+    if (statusOverlay) statusOverlay.classList.add('hidden');
+
+    if (!isLocal && stream) {
+      const muteBtn = cardEl.querySelector('[data-action="toggle-mute"]');
+      const hasAudio = stream.getAudioTracks && stream.getAudioTracks().length > 0;
+      if (muteBtn) {
+        if (hasAudio) {
+          muteBtn.classList.remove('hidden');
+          muteBtn.textContent = videoEl.muted ? '🔇 Activar sonido' : '🔊 Sonido activo';
+        } else {
+          muteBtn.classList.add('hidden');
+        }
+      }
+    }
+  }
+
+  function syncCardStream(cardEl, post) {
+    if (!post.screenShare?.active) return;
+    const streamInfo = screenManager.getStream(post.id);
+    if (streamInfo && streamInfo.stream) {
+      attachVideoUI(cardEl, post.id, streamInfo.stream, streamInfo.isLocal);
+    }
+  }
+
+  function renderBoardFull() {
+    const padlets = getPadletPosts();
+    const filtered = padlets.filter(matchesCurrentFilters);
+    el.boardGrid.innerHTML = '';
+
+    if (padlets.length === 0) {
+      el.emptyState.classList.remove('hidden');
+      updatePostCounter();
+      return;
+    }
+
+    el.emptyState.classList.add('hidden');
+
+    if (filtered.length === 0) {
+      el.boardGrid.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1; margin: 24px auto;"><h2>Sin resultados</h2><p>No hay publicaciones que coincidan con tu filtro o búsqueda actual.</p></div>`;
+      updatePostCounter();
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    filtered.forEach((post) => {
+      const cardEl = buildCardElement(post);
+      fragment.appendChild(cardEl);
+    });
+    el.boardGrid.appendChild(fragment);
+
+    filtered.forEach((post) => {
+      if (post.screenShare?.active) {
+        const cardEl = el.boardGrid.querySelector(`.card[data-post-id="${CSS.escape(post.id)}"]`);
+        if (cardEl) syncCardStream(cardEl, post);
+      }
+    });
+
+    updatePostCounter();
+  }
+
+  function setFocusedCard(postId) {
+    const prevId = state.focusedCardId;
+    state.focusedCardId = prevId === postId ? null : postId;
+    if (prevId) {
+      const prevEl = el.boardGrid.querySelector(`.card[data-post-id="${CSS.escape(prevId)}"]`);
+      if (prevEl) prevEl.classList.remove('card-focused');
+    }
+    if (state.focusedCardId) {
+      const nextEl = el.boardGrid.querySelector(`.card[data-post-id="${CSS.escape(state.focusedCardId)}"]`);
+      if (nextEl) nextEl.classList.add('card-focused');
+    }
+  }
+
+  // --- Event Delegation on Padlets Grid AND Screens Grid ---
+  async function handleCardGridClick(e) {
+    const cardEl = e.target.closest('.card');
+    if (!cardEl) return;
+    const postId = cardEl.dataset.postId;
+    const post = state.posts.find((p) => p.id === postId);
+    if (!post) return;
+
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) {
+      // If Padlets board is in compact mode and user clicked the card (not an interactive control), grow/shrink it!
+      if (
+        cardEl.parentElement === el.boardGrid &&
+        el.boardGrid.classList.contains('board-grid--compact') &&
+        !e.target.closest('a, button, input, textarea, form, video')
+      ) {
+        setFocusedCard(postId);
+      }
+      return;
+    }
+
+    const action = actionEl.dataset.action;
+
+    if (action === 'shrink-card') {
+      setFocusedCard(null);
+    } else if (action === 'highlight-post') {
+      socket.emit('post:highlight', { id: postId, highlighterName: authorName || 'Participante' }, (res) => {
+        if (!res?.ok) showToast(res?.error || 'No se pudo destacar la respuesta', 'error');
+        else showToast(res.post?.highlighted ? '⭐ Tarjeta destacada' : 'Destacado retirado', 'info');
+      });
+    } else if (action === 'like-post') {
+      socket.emit('post:like', { id: postId, authorId });
+    } else if (action === 'pin-post') {
+      socket.emit('teacher:post:pin', { id: postId, teacherToken: state.teacherToken }, (res) => {
+        if (!res?.ok) showToast(res?.error || 'No se pudo fijar la tarjeta', 'error');
+      });
+    } else if (action === 'hide-post') {
+      socket.emit(
+        'teacher:post:toggle-hide',
+        { id: postId, teacherToken: state.teacherToken, moderatorName: authorName || 'Profesor' },
+        (res) => {
+          if (!res?.ok) showToast(res?.error || 'No se pudo despublicar/republicar la tarjeta', 'error');
+          else showToast(res.post?.isHidden ? '🚫 Tarjeta despublicada para los alumnos' : '👁️ Tarjeta republicada y visible para alumnos', 'info');
+        }
+      );
+    } else if (action === 'review-post') {
+      socket.emit(
+        'teacher:post:review',
+        { id: postId, teacherToken: state.teacherToken, reviewerName: authorName || 'Profesor' },
+        (res) => {
+          if (!res?.ok) showToast(res?.error || 'No se pudo marcar como revisada', 'error');
+          else showToast(res.post?.reviewed ? '✓✓ Tarjeta marcada como revisada' : 'Visto de revisada retirado', 'success');
+        }
+      );
+    } else if (action === 'teacher-pause-screen') {
+      socket.emit(
+        'teacher:screen:pause',
+        { postId, paused: true, teacherToken: state.teacherToken, teacherName: authorName || 'Profesor' },
+        (res) => {
+          if (!res?.ok) showToast(res?.error || 'No se pudo cortar la pantalla', 'error');
+          else showToast('✂ Pantalla compartida cortada (puedes retomarla cuando quieras)', 'info');
+        }
+      );
+    } else if (action === 'teacher-resume-screen') {
+      socket.emit(
+        'teacher:screen:pause',
+        { postId, paused: false, teacherToken: state.teacherToken, teacherName: authorName || 'Profesor' },
+        (res) => {
+          if (!res?.ok) showToast(res?.error || 'No se pudo retomar la pantalla', 'error');
+          else showToast('▶ Pantalla compartida retomada', 'success');
+        }
+      );
+    } else if (action === 'teacher-stop-screen') {
+      socket.emit(
+        'teacher:screen:stop',
+        { postId, teacherToken: state.teacherToken, teacherName: authorName || 'Profesor' },
+        (res) => {
+          if (!res?.ok) showToast(res?.error || 'No se pudo finalizar la transmisión', 'error');
+          else showToast('Transmisión finalizada por el profesor');
+        }
+      );
+    } else if (action === 'teacher-request-screen') {
+      socket.emit(
+        'teacher:screen:request-resume',
+        { postId, teacherToken: state.teacherToken, teacherName: authorName || 'Profesor' },
+        (res) => {
+          if (!res?.ok) showToast(res?.error || 'No se pudo solicitar pantalla', 'error');
+          else if (res.mode === 'resumed-instant') showToast('▶ Pantalla retomada al instante', 'success');
+          else showToast(`📢 Solicitud enviada a ${res.author || post.author} para compartir/retomar pantalla`, 'success');
+        }
+      );
+    } else if (action === 'toggle-comments') {
+      if (state.openComments.has(postId)) {
+        state.openComments.delete(postId);
+      } else {
+        state.openComments.add(postId);
+      }
+      patchCardInPlace(cardEl, post);
+      if (state.openComments.has(postId)) {
+        const input = cardEl.querySelector('.comment-form input');
+        if (input) input.focus();
+      }
+    } else if (action === 'edit-post') {
+      openComposerForEdit(post);
+    } else if (action === 'delete-post') {
+      const ok = window.confirm(`¿Eliminar la publicación "${post.topic}"?`);
+      if (!ok) return;
+      socket.emit('post:delete', { id: postId, authorId, teacherToken: state.teacherToken }, (res) => {
+        if (!res?.ok) showToast(res?.error || 'No se pudo eliminar', 'error');
+        else showToast('Publicación eliminada');
+      });
+    } else if (action === 'open-lightbox') {
+      el.lightboxImg.src = actionEl.dataset.imgSrc || '';
+      el.lightboxCaption.textContent = actionEl.dataset.imgCaption || '';
+      openModal(el.lightboxModal);
+    } else if (action === 'start-screen') {
+      await triggerStartScreenShare(post);
+    } else if (action === 'stop-screen') {
+      screenManager.stopSharing(postId);
+      showToast('Pantalla compartida detenida');
+    } else if (action === 'reconnect-screen') {
+      if (post.screenShare?.sharerSocketId) {
+        screenManager.reconnectWatch(postId, post.screenShare.sharerSocketId);
+        showToast('Reconectando transmisión...');
+      }
+    } else if (action === 'toggle-mute') {
+      const videoEl = cardEl.querySelector('.screen-stage video');
+      if (videoEl) {
+        videoEl.muted = !videoEl.muted;
+        actionEl.textContent = videoEl.muted ? '🔇 Activar sonido' : '🔊 Sonido activo';
+      }
+    } else if (action === 'toggle-expand') {
+      if (state.expandedCards.has(postId)) {
+        state.expandedCards.delete(postId);
+      } else {
+        state.expandedCards.add(postId);
+      }
+      cardEl.classList.toggle('card-expanded', state.expandedCards.has(postId));
+      actionEl.textContent = state.expandedCards.has(postId) ? '⤡ Reducir' : '⤢ Ampliar';
+    } else if (action === 'fullscreen-screen') {
+      const stage = cardEl.querySelector('.screen-stage');
+      const videoEl = cardEl.querySelector('.screen-stage video');
+      const target = stage || videoEl;
+      if (target) {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        } else if (target.requestFullscreen) {
+          target.requestFullscreen().catch(() => {
+            if (videoEl?.webkitEnterFullscreen) videoEl.webkitEnterFullscreen();
+          });
+        } else if (videoEl?.webkitEnterFullscreen) {
+          videoEl.webkitEnterFullscreen();
+        }
+      }
+    } else if (action === 'pip-screen') {
+      const videoEl = cardEl.querySelector('.screen-stage video');
+      if (videoEl && document.pictureInPictureEnabled) {
+        try {
+          if (document.pictureInPictureElement === videoEl) {
+            await document.exitPictureInPicture();
+          } else {
+            await videoEl.requestPictureInPicture();
+          }
+        } catch {
+          showToast('No se pudo activar Imagen en imagen', 'error');
+        }
+      }
+    }
+  }
+
+  el.boardGrid.addEventListener('click', handleCardGridClick);
+  el.screensGrid.addEventListener('click', handleCardGridClick);
+
+  // Handle inline comment submission on BOTH grids
+  function handleCardCommentSubmit(e) {
+    const form = e.target.closest('.comment-form');
+    if (!form) return;
+    e.preventDefault();
+
+    const cardEl = form.closest('.card');
+    if (!cardEl) return;
+    const postId = cardEl.dataset.postId;
+    const input = form.querySelector('input[name="commentText"]');
+    const text = input.value.trim();
+    if (!text) return;
+
+    if (!authorName) {
+      const prompted = window.prompt('Ingresa tu nombre para comentar:');
+      if (!prompted || !prompted.trim()) return;
+      setAuthorName(prompted);
+    }
+
+    input.disabled = true;
+    socket.emit(
+      'post:comment',
+      { id: postId, authorId, author: authorName, text },
+      (res) => {
+        input.disabled = false;
+        if (res?.ok) {
+          input.value = '';
+        } else {
+          showToast(res?.error || 'No se pudo enviar el comentario', 'error');
+        }
+      }
+    );
+  }
+
+  el.boardGrid.addEventListener('submit', handleCardCommentSubmit);
+  el.screensGrid.addEventListener('submit', handleCardCommentSubmit);
+
+  // --- Drag & Drop Reordering for Posts ---
+  function setupGridDragAndDrop(gridEl) {
+    if (!gridEl) return;
+    let draggedCard = null;
+
+    gridEl.addEventListener('dragstart', (e) => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+
+      // Avoid initiating drag when selecting text or clicking buttons/inputs unless using drag handle
+      const targetIsHandle = Boolean(e.target.closest('.drag-handle'));
+      const targetIsInteractive = Boolean(e.target.closest('input, textarea, button, a, select, video, .card-image-wrap'));
+      if (targetIsInteractive && !targetIsHandle) {
+        e.preventDefault();
+        return;
+      }
+
+      draggedCard = card;
+      card.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.postId || '');
+    });
+
+    gridEl.addEventListener('dragover', (e) => {
+      if (!draggedCard) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const targetCard = e.target.closest('.card');
+      if (!targetCard || targetCard === draggedCard) return;
+
+      gridEl.querySelectorAll('.card.drop-before, .card.drop-after').forEach((c) => {
+        if (c !== targetCard) {
+          c.classList.remove('drop-before', 'drop-after');
+        }
+      });
+
+      const rect = targetCard.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      const midX = rect.left + rect.width / 2;
+      const isBefore = e.clientY < midY || (Math.abs(e.clientY - midY) < 30 && e.clientX < midX);
+
+      if (isBefore) {
+        targetCard.classList.add('drop-before');
+        targetCard.classList.remove('drop-after');
+      } else {
+        targetCard.classList.add('drop-after');
+        targetCard.classList.remove('drop-before');
+      }
+    });
+
+    gridEl.addEventListener('dragleave', (e) => {
+      const targetCard = e.target.closest('.card');
+      if (targetCard && !targetCard.contains(e.relatedTarget)) {
+        targetCard.classList.remove('drop-before', 'drop-after');
+      }
+    });
+
+    gridEl.addEventListener('drop', (e) => {
+      if (!draggedCard) return;
+      e.preventDefault();
+
+      const targetCard = e.target.closest('.card');
+      if (targetCard && targetCard !== draggedCard) {
+        const isBefore = targetCard.classList.contains('drop-before');
+        if (isBefore) {
+          gridEl.insertBefore(draggedCard, targetCard);
+        } else {
+          gridEl.insertBefore(draggedCard, targetCard.nextSibling);
+        }
+
+        const postIds = Array.from(gridEl.querySelectorAll('.card'))
+          .map((c) => c.dataset.postId)
+          .filter(Boolean);
+
+        postIds.forEach((id, idx) => {
+          const p = state.posts.find((item) => item.id === id);
+          if (p) p.order = idx + 1;
+        });
+
+        socket.emit('post:reorder', {
+          sessionId: state.activeSessionId,
+          postIds,
+        });
+      }
+
+      cleanupDrag();
+    });
+
+    gridEl.addEventListener('dragend', () => {
+      cleanupDrag();
+    });
+
+    function cleanupDrag() {
+      if (draggedCard) {
+        draggedCard.classList.remove('is-dragging');
+        draggedCard = null;
+      }
+      gridEl.querySelectorAll('.card.drop-before, .card.drop-after').forEach((c) => {
+        c.classList.remove('drop-before', 'drop-after');
+      });
+    }
+  }
+
+  setupGridDragAndDrop(el.boardGrid);
+  setupGridDragAndDrop(el.screensGrid);
+
+  // --- Screen Sharing Trigger ---
+  async function triggerStartScreenShare(post) {
+    if (!screenManager.isSecureContextAvailable()) {
+      openModal(el.httpsRequiredModal);
+      return false;
+    }
+
+    try {
+      await screenManager.startSharing(post.id, {
+        authorId,
+        authorName: authorName || post.author,
+      });
+      showToast('Compartiendo tu pantalla en tiempo real', 'success');
+      return true;
+    } catch (err) {
+      if (err.code === 'HTTPS_REQUIRED') {
+        openModal(el.httpsRequiredModal);
+      } else if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+        showToast('Captura de pantalla cancelada');
+      } else {
+        showToast(err.message || 'No se pudo compartir la pantalla', 'error');
+      }
+      return false;
+    }
+  }
+
+  // --- Simple Screen Share / Queue Modal (ONLY Name & Reason) ---
+  function openScreenShareModal() {
+    el.screenAuthorInput.value = authorName;
+    el.screenReasonInput.value = '';
+    el.screenModalError.textContent = '';
+    el.screenModalError.classList.add('hidden');
+    openModal(el.screenShareModal);
+    if (!authorName) {
+      el.screenAuthorInput.focus();
+    } else {
+      el.screenReasonInput.focus();
+    }
+  }
+
+  function showScreenModalError(msg) {
+    el.screenModalError.textContent = msg;
+    el.screenModalError.classList.remove('hidden');
+  }
+
+  async function createScreenCardAndShare({ author, reason }) {
+    if (!screenManager.isSecureContextAvailable()) {
+      openModal(el.httpsRequiredModal);
+      return false;
+    }
+
+    setAuthorName(author);
+
+    const ack = await new Promise((resolve) => {
+      socket.emit(
+        'post:create',
+        {
+          sessionId: state.activeSessionId,
+          kind: 'screen',
+          authorId,
+          author,
+          topic: reason,
+          content: '',
+          color: 'default',
+        },
+        resolve
+      );
+    });
+
+    if (!ack?.ok || !ack.post) {
+      throw new Error(ack?.error || 'No se pudo crear la tarjeta de pantalla.');
+    }
+
+    if (state.workspaceView === 'padlets') {
+      applyWorkspaceView('screens');
+    }
+
+    return triggerStartScreenShare(ack.post);
+  }
+
+  el.btnJoinScreenQueue.addEventListener('click', () => {
+    const author = el.screenAuthorInput.value.trim();
+    const reason = el.screenReasonInput.value.trim();
+    el.screenModalError.classList.add('hidden');
+
+    if (!author) {
+      showScreenModalError('Por favor ingresa tu nombre.');
+      el.screenAuthorInput.focus();
+      return;
+    }
+    if (!reason) {
+      showScreenModalError('Por favor escribe el motivo para compartir tu pantalla.');
+      el.screenReasonInput.focus();
+      return;
+    }
+
+    setAuthorName(author);
+    el.btnJoinScreenQueue.disabled = true;
+    socket.emit('screen-queue:join', { authorId, author, reason }, (ack) => {
+      el.btnJoinScreenQueue.disabled = false;
+      if (!ack?.ok) {
+        showScreenModalError(ack?.error || 'No se pudo agregar a la cola.');
+        return;
+      }
+      closeModal(el.screenShareModal);
+      if (state.workspaceView === 'padlets') {
+        applyWorkspaceView('screens');
+      }
+      showToast(
+        ack.updated
+          ? 'Tu solicitud en la cola fue actualizada'
+          : '🙋 Te agregaste a la cola para compartir pantalla',
+        'success'
+      );
+    });
+  });
+
+  el.screenShareForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const author = el.screenAuthorInput.value.trim();
+    const reason = el.screenReasonInput.value.trim();
+    el.screenModalError.classList.add('hidden');
+
+    if (!author) {
+      showScreenModalError('Por favor ingresa tu nombre.');
+      el.screenAuthorInput.focus();
+      return;
+    }
+    if (!reason) {
+      showScreenModalError('Por favor escribe el motivo para compartir tu pantalla.');
+      el.screenReasonInput.focus();
+      return;
+    }
+
+    if (!screenManager.isSecureContextAvailable()) {
+      closeModal(el.screenShareModal);
+      openModal(el.httpsRequiredModal);
+      return;
+    }
+
+    el.btnStartScreenDirect.disabled = true;
+    try {
+      closeModal(el.screenShareModal);
+      await createScreenCardAndShare({ author, reason });
+    } catch (err) {
+      showToast(err.message || 'No se pudo compartir la pantalla', 'error');
+    } finally {
+      el.btnStartScreenDirect.disabled = false;
+    }
+  });
+
+  // --- Composer Modal (Create / Edit Padlet) ---
+  function resetComposer() {
+    el.editPostId.value = '';
+    el.composerTitle.textContent = 'Nueva publicación (Padlet)';
+    el.btnSubmitPost.textContent = 'Publicar Padlet';
+    el.inputAuthor.value = authorName;
+    el.inputAuthor.disabled = false;
+    el.inputTopic.value = '';
+    el.inputContent.value = '';
+    state.selectedFile = null;
+    state.existingImageUrl = null;
+    state.existingImageName = null;
+    state.removeExistingImage = false;
+    el.inputImage.value = '';
+    showImagePreview(null);
+    selectColor('default');
+    hideComposerError();
+  }
+
+  function openComposerForCreate() {
+    resetComposer();
+    openModal(el.composerModal);
+    if (!authorName) {
+      el.inputAuthor.focus();
+    } else {
+      el.inputTopic.focus();
+    }
+  }
+
+  function openComposerForEdit(post) {
+    resetComposer();
+    el.editPostId.value = post.id;
+    el.composerTitle.textContent = isScreenPost(post) ? 'Editar motivo de pantalla' : 'Editar publicación';
+    el.btnSubmitPost.textContent = 'Guardar cambios';
+    el.inputAuthor.value = post.author;
+    el.inputAuthor.disabled = true;
+    el.inputTopic.value = post.topic;
+    el.inputContent.value = post.content || '';
+    state.existingImageUrl = post.imageUrl || null;
+    state.existingImageName = post.imageName || null;
+    if (post.imageUrl) {
+      showImagePreview(post.imageUrl);
+    }
+    selectColor(post.color || 'default');
+    openModal(el.composerModal);
+    el.inputTopic.focus();
+  }
+
+  function showComposerError(msg) {
+    el.composerError.textContent = msg;
+    el.composerError.classList.remove('hidden');
+  }
+
+  function hideComposerError() {
+    el.composerError.textContent = '';
+    el.composerError.classList.add('hidden');
+  }
+
+  function selectColor(color) {
+    state.selectedColor = color;
+    el.colorPicker.querySelectorAll('.color-swatch').forEach((swatch) => {
+      swatch.classList.toggle('selected', swatch.dataset.color === color);
+    });
+  }
+
+  el.colorPicker.addEventListener('click', (e) => {
+    const swatch = e.target.closest('.color-swatch');
+    if (!swatch) return;
+    selectColor(swatch.dataset.color);
+  });
+
+  function showImagePreview(src) {
+    if (src) {
+      el.imagePreview.src = src;
+      el.imagePreviewBox.classList.remove('hidden');
+      el.dropzonePlaceholder.classList.add('hidden');
+    } else {
+      el.imagePreview.src = '';
+      el.imagePreviewBox.classList.add('hidden');
+      el.dropzonePlaceholder.classList.remove('hidden');
+    }
+  }
+
+  function handleSelectedImageFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showComposerError('El archivo seleccionado no es una imagen válida.');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      showComposerError('La imagen supera el máximo permitido de 15 MB.');
+      return;
+    }
+    hideComposerError();
+    state.selectedFile = file;
+    state.removeExistingImage = false;
+    const reader = new FileReader();
+    reader.onload = () => showImagePreview(reader.result);
+    reader.readAsDataURL(file);
+  }
+
+  el.imageDropzone.addEventListener('click', (e) => {
+    if (e.target.closest('#btnRemoveImage')) return;
+    el.inputImage.click();
+  });
+
+  el.inputImage.addEventListener('change', () => {
+    if (el.inputImage.files && el.inputImage.files[0]) {
+      handleSelectedImageFile(el.inputImage.files[0]);
+    }
+  });
+
+  el.imageDropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    el.imageDropzone.classList.add('dragover');
+  });
+
+  el.imageDropzone.addEventListener('dragleave', () => {
+    el.imageDropzone.classList.remove('dragover');
+  });
+
+  el.imageDropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.imageDropzone.classList.remove('dragover');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handleSelectedImageFile(file);
+  });
+
+  el.btnRemoveImage.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.selectedFile = null;
+    if (state.existingImageUrl) {
+      state.removeExistingImage = true;
+    }
+    el.inputImage.value = '';
+    showImagePreview(null);
+  });
+
+  // Paste screenshot directly in Composer OR Teacher Assignment modal
+  window.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const composerOpen = !el.composerModal.classList.contains('hidden');
+    const taskOpen =
+      !el.teacherPanelModal.classList.contains('hidden') && state.activeTeacherTab === 'assignment';
+
+    if (!composerOpen && !taskOpen) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          if (composerOpen) {
+            handleSelectedImageFile(file);
+          } else if (taskOpen) {
+            handleTaskImageFile(file);
+          }
+          showToast('Imagen pegada desde el portapapeles');
+          break;
+        }
+      }
+    }
+  });
+
+  async function submitComposer() {
+    hideComposerError();
+    const editingId = el.editPostId.value;
+    const author = el.inputAuthor.value.trim();
+    const topic = el.inputTopic.value.trim();
+    const content = el.inputContent.value.trim();
+
+    if (!editingId && !author) {
+      showComposerError('Por favor ingresa tu nombre.');
+      el.inputAuthor.focus();
+      return;
+    }
+    if (!topic) {
+      showComposerError('Por favor ingresa un tema para la publicación.');
+      el.inputTopic.focus();
+      return;
+    }
+
+    if (!editingId) {
+      setAuthorName(author);
+    }
+
+    el.btnSubmitPost.disabled = true;
+
+    try {
+      const uploaded = state.selectedFile ? await uploadFile(state.selectedFile) : null;
+
+      if (editingId) {
+        const ack = await new Promise((resolve) => {
+          socket.emit(
+            'post:update',
+            {
+              id: editingId,
+              sessionId: state.activeSessionId,
+              authorId,
+              teacherToken: state.teacherToken,
+              topic,
+              content,
+              color: state.selectedColor,
+              imageUrl: uploaded ? uploaded.imageUrl : state.existingImageUrl,
+              imageName: uploaded ? uploaded.imageName : state.existingImageName,
+              removeImage: state.removeExistingImage && !uploaded,
+            },
+            resolve
+          );
+        });
+        if (!ack?.ok) throw new Error(ack?.error || 'No se pudo actualizar.');
+        closeModal(el.composerModal);
+        showToast('Publicación actualizada', 'success');
+      } else {
+        const ack = await new Promise((resolve) => {
+          socket.emit(
+            'post:create',
+            {
+              sessionId: state.activeSessionId,
+              kind: 'padlet',
+              authorId,
+              author,
+              topic,
+              content,
+              color: state.selectedColor,
+              imageUrl: uploaded ? uploaded.imageUrl : null,
+              imageName: uploaded ? uploaded.imageName : null,
+            },
+            resolve
+          );
+        });
+        if (!ack?.ok) throw new Error(ack?.error || 'No se pudo crear la publicación.');
+        closeModal(el.composerModal);
+        if (state.workspaceView === 'screens') {
+          applyWorkspaceView('padlets');
+        }
+        showToast('Publicado en el panel de Padlets', 'success');
+      }
+    } catch (err) {
+      showComposerError(err.message || 'Ocurrió un error al publicar.');
+    } finally {
+      el.btnSubmitPost.disabled = false;
+    }
+  }
+
+  el.composerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitComposer();
+  });
+
+  // --- UI Mode (Modo Fácil vs Modo Completo), Density, Help Guide & Resume Request ---
+  function applyUiMode(mode) {
+    state.uiMode = mode === 'easy' ? 'easy' : 'full';
+    localStorage.setItem(STORAGE_UI_MODE_KEY, state.uiMode);
+    const isEasy = state.uiMode === 'easy';
+    document.body.classList.toggle('mode-easy', isEasy);
+    el.easyModeBar.classList.toggle('hidden', !isEasy);
+
+    el.uiModeToggle.querySelectorAll('.mode-switch-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.uiMode === state.uiMode);
+    });
+
+    el.btnHelpSwitchEasy.textContent = isEasy ? '⚡ Cambiar a Modo Completo' : '🌱 Activar Modo Fácil';
+    el.btnNewPost.querySelector('span').textContent = isEasy ? 'Escribir respuesta' : 'Publicar';
+  }
+
+  el.uiModeToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.mode-switch-btn');
+    if (!btn) return;
+    applyUiMode(btn.dataset.uiMode);
+    showToast(
+      state.uiMode === 'easy'
+        ? '🌱 Modo Fácil activado: botones grandes y simples'
+        : '⚡ Modo Completo activado: todas las opciones visibles'
+    );
+  });
+
+  el.btnHelpGuide.addEventListener('click', () => openModal(el.helpGuideModal));
+  el.btnEasyHelp.addEventListener('click', () => openModal(el.helpGuideModal));
+  el.btnEasyPublish.addEventListener('click', () => openComposerForCreate());
+  el.btnEasyShare.addEventListener('click', () => openScreenShareModal());
+  el.btnOpenScreenModal.addEventListener('click', () => openScreenShareModal());
+  el.btnQueueJoinQuick.addEventListener('click', () => openScreenShareModal());
+  el.btnShareScreenFromTab.addEventListener('click', () => openScreenShareModal());
+  el.btnScreensEmptyShare.addEventListener('click', () => openScreenShareModal());
+
+  el.btnHelpSwitchEasy.addEventListener('click', () => {
+    applyUiMode(state.uiMode === 'easy' ? 'full' : 'easy');
+    closeModal(el.helpGuideModal);
+    showToast(state.uiMode === 'easy' ? '🌱 Modo Fácil activado' : '⚡ Modo Completo activado');
+  });
+
+  el.densityControl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.density-btn');
+    if (!btn) return;
+    state.densityMode = btn.dataset.density;
+    localStorage.setItem(STORAGE_DENSITY_KEY, state.densityMode);
+    updateBoardDensity();
+  });
+
+  el.btnAcceptResumeScreen.addEventListener('click', async () => {
+    const postId = state.pendingResumePostId;
+    const turnGrant = state.pendingTurnGrant;
+    closeModal(el.resumeScreenModal);
+    state.pendingResumePostId = null;
+    state.pendingTurnGrant = null;
+
+    if (turnGrant) {
+      try {
+        await createScreenCardAndShare({
+          author: turnGrant.author || authorName || 'Participante',
+          reason: turnGrant.reason || 'Pantalla compartida',
+        });
+      } catch (err) {
+        showToast(err.message || 'No se pudo compartir la pantalla', 'error');
+      }
+      return;
+    }
+
+    if (!postId) return;
+    const post = state.posts.find((p) => p.id === postId);
+    if (!post) return;
+    if (state.workspaceView === 'padlets') {
+      applyWorkspaceView('screens');
+    }
+    await triggerStartScreenShare(post);
+  });
+
+  applyUiMode(state.uiMode);
+  applyWorkspaceView(state.workspaceView);
+
+  // --- Header & Toolbar Listeners ---
+  el.btnNewPost.addEventListener('click', () => openComposerForCreate());
+  el.fabNewPost.addEventListener('click', () => openComposerForCreate());
+  el.btnEmptyCreate.addEventListener('click', () => openComposerForCreate());
+  el.btnEmptyShare.addEventListener('click', () => openScreenShareModal());
+
+  el.btnNetworkInfo.addEventListener('click', async () => {
+    await loadServerInfo();
+    openModal(el.networkModal);
+  });
+
+  el.searchInput.addEventListener('input', () => {
+    state.searchQuery = el.searchInput.value;
+    renderBoardFull();
+  });
+
+  el.btnEditBoard.addEventListener('click', () => {
+    el.inputBoardTitle.value = state.board.title || '';
+    el.inputBoardDesc.value = state.board.description || '';
+    openModal(el.boardEditModal);
+    el.inputBoardTitle.focus();
+  });
+
+  el.boardEditForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = el.inputBoardTitle.value.trim();
+    const description = el.inputBoardDesc.value.trim();
+    if (!title) return;
+    try {
+      const res = await fetch('/api/board', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description }),
+      });
+      if (!res.ok) throw new Error('Error al guardar');
+      closeModal(el.boardEditModal);
+      showToast('Panel actualizado', 'success');
+    } catch {
+      showToast('No se pudo actualizar el panel', 'error');
+    }
+  });
+
+  el.btnUserChip.addEventListener('click', () => {
+    el.inputQuickName.value = authorName;
+    openModal(el.nameModal);
+    el.inputQuickName.focus();
+  });
+
+  el.nameForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = el.inputQuickName.value.trim();
+    if (!name) return;
+    setAuthorName(name);
+    closeModal(el.nameModal);
+    showToast(`Hola, ${name}`);
+  });
+
+  el.lightboxClose.addEventListener('click', () => closeModal(el.lightboxModal));
+  el.lightboxModal.addEventListener('click', (e) => {
+    if (e.target === el.lightboxModal) closeModal(el.lightboxModal);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      [
+        el.timerProjectorModal,
+        el.lightboxModal,
+        el.composerModal,
+        el.screenShareModal,
+        el.teacherPanelModal,
+        el.teacherLoginModal,
+        el.notificationsModal,
+        el.helpGuideModal,
+        el.resumeScreenModal,
+        el.networkModal,
+        el.httpsRequiredModal,
+        el.boardEditModal,
+        el.nameModal,
+        el.aboutDevModal,
+        document.getElementById('liveQuizModal'),
+        document.getElementById('quizAnalyticsModal'),
+      ].filter(Boolean).forEach(closeModal);
+      return;
+    }
+
+    const activeTag = document.activeElement?.tagName;
+    const isTyping = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+    const anyModalOpen = Boolean(
+      document.querySelector('.modal-backdrop:not(.hidden), .lightbox:not(.hidden), .projector-overlay:not(.hidden)')
+    );
+
+    if (!isTyping && !anyModalOpen && (e.key === 'n' || e.key === 'N')) {
+      e.preventDefault();
+      openComposerForCreate(false);
+    }
+  });
+
+  // --- About CoDevNexus & Check Updates Listeners ---
+  if (el.btnAboutDev && el.aboutDevModal) {
+    el.btnAboutDev.addEventListener('click', () => {
+      openModal(el.aboutDevModal);
+    });
+  }
+
+  if (el.btnCheckUpdates && el.updatesResultBox) {
+    el.btnCheckUpdates.addEventListener('click', async () => {
+      el.btnCheckUpdates.disabled = true;
+      el.updatesResultBox.classList.remove('hidden');
+      el.updatesResultBox.innerHTML = `
+        <div class="updates-status updates-status--checking" style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-subtle);">
+          <span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid #3b82f6;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></span>
+          <span>Verificando estado del repositorio y actualizaciones...</span>
+        </div>
+      `;
+      try {
+        const res = await fetch('/api/updates/check');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'No se pudo verificar el repositorio');
+
+        if (el.appCurrentVersionBadge) {
+          el.appCurrentVersionBadge.textContent = `v${data.currentVersion || '1.2.0'}`;
+        }
+
+        const isGit = Boolean(data.isGitRepo);
+        const branchBadge = isGit
+          ? `<span style="background:rgba(16,185,129,0.15);color:#10b981;padding:2px 8px;border-radius:12px;font-weight:600;font-size:0.75rem;">Rama: ${escapeHtml(
+              data.gitBranch || 'main'
+            )}</span>`
+          : `<span style="background:rgba(245,158,11,0.15);color:#f59e0b;padding:2px 8px;border-radius:12px;font-weight:600;font-size:0.75rem;">Sin Git (.zip)</span>`;
+
+        el.updatesResultBox.innerHTML = `
+          <div class="updates-status updates-status--ready" style="padding:10px 12px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-size:0.88rem;font-weight:700;">Versión activa: v${escapeHtml(data.currentVersion || '1.2.0')}</span>
+              ${branchBadge}
+            </div>
+            <p style="margin:0 0 8px 0;font-size:0.82rem;color:var(--text-subtle);line-height:1.4;">
+              ${escapeHtml(data.message || 'Sistema listo y operativo en red local.')}
+            </p>
+            <div style="background:var(--bg-card);border:1px dashed var(--border-color);padding:8px 10px;border-radius:6px;font-size:0.78rem;line-height:1.45;">
+              <strong>¿Cómo actualizar sin borrar tus publicaciones?:</strong>
+              <ol style="margin:4px 0 0 16px;padding:0;">
+                <li>Cierra el servidor y abre <code>PadletLocal.bat</code>.</li>
+                <li>Selecciona la opción <strong>[9] Actualizar sistema (Git / Backup)</strong>.</li>
+                <li>O manualmente ejecuta: <code>git pull origin main &amp;&amp; npm install</code>.</li>
+                <li>Tus datos en <code>data/posts.json</code> y fotos en <code>uploads/</code> están 100% protegidos y respaldados automáticamente.</li>
+              </ol>
+            </div>
+          </div>
+        `;
+      } catch (err) {
+        el.updatesResultBox.innerHTML = `
+          <div class="updates-status updates-status--error" style="padding:8px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:#ef4444;font-size:0.82rem;">
+            ✕ ${escapeHtml(err.message || 'Error al conectar')}
+          </div>
+        `;
+      } finally {
+        el.btnCheckUpdates.disabled = false;
+      }
+    });
+  }
+
+  setInterval(() => {
+    state.posts.forEach((post) => {
+      const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(post.id)}"]`);
+      if (!cardEl) return;
+      const timeEl = cardEl.querySelector('.post-time');
+      if (timeEl) {
+        timeEl.textContent = `${formatRelativeTime(post.createdAt)}${post.updatedAt ? ' · editado' : ''}`;
+      }
+    });
+    const expandedTask = getExpandedTask();
+    if (expandedTask) {
+      el.assignmentMeta.textContent = `${expandedTask.updatedBy || 'Profesor'} · ${formatRelativeTime(
+        expandedTask.updatedAt
+      )}`;
+    }
+  }, 60000);
+
+  // Clean bridge for modular extensions (quiz.js)
+  window.PadletApp = {
+    socket,
+    state,
+    getAuthorId: () => authorId,
+    getAuthorName: () => authorName,
+    setAuthorName,
+    serverNow,
+    escapeHtml,
+    formatRelativeTime,
+    openModal,
+    closeModal,
+    showToast,
+    playChime,
+    copyTextToClipboard,
+    closeTeacherPanel: () => closeModal(el.teacherPanelModal),
+  };
+})();

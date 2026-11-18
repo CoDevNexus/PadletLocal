@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manual de Usuarios — PadletLocal</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #475569;
+      --primary: #4f46e5;
+      --primary-soft: #eef2ff;
+      --emerald: #059669;
+      --emerald-soft: #ecfdf5;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      z-index: 10;
+    }
+    .topbar strong { font-size: 1.05rem; }
+    .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 9px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: var(--text);
+      font-size: 0.86rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .container {
+      max-width: 880px;
+      margin: 24px auto 60px;
+      padding: 0 18px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      color: #fff;
+      border-radius: 18px;
+      padding: 28px 26px;
+      margin-bottom: 22px;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 1.7rem; }
+    .hero p { margin: 0; opacity: 0.92; font-size: 0.98rem; }
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 1.18rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    p, li { color: var(--muted); font-size: 0.95rem; }
+    ul, ol { margin: 8px 0; padding-left: 22px; }
+    li { margin-bottom: 6px; }
+    .callout {
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    .callout-info { background: var(--primary-soft); border-left: 4px solid var(--primary); }
+    .callout-ok { background: var(--emerald-soft); border-left: 4px solid var(--emerald); }
+    .callout-warn { background: var(--amber-soft); border-left: 4px solid #d97706; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .box {
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      padding: 13px 14px;
+      background: #f8fafc;
+    }
+    .box h3 { margin: 0 0 6px; font-size: 0.98rem; color: var(--text); }
+    code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.86rem;
+      color: #0f172a;
+    }
+    @media (max-width: 680px) { .grid-2 { grid-template-columns: 1fr; } }
+    @media print {
+      .topbar { display: none; }
+      body { background: #fff; }
+      .section { break-inside: avoid; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <strong>📖 Manual de Usuarios — PadletLocal</strong>
+    <div class="topbar-actions">
+      <button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+      <a class="btn" href="/manual-profesor.html">🎓 Manual del Profesor</a>
+      <a class="btn btn-primary" href="/">← Volver al panel</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="hero">
+      <h1>Guía para Usuarios y Participantes</h1>
+      <p>Todo lo que necesitas para entrar al panel en red local, revisar tareas, publicar texto o imágenes y compartir tu pantalla fácilmente.</p>
+    </div>
+
+    <section class="section">
+      <h2><span class="num">1</span> Cómo entrar al panel (y quitar la pantalla roja)</h2>
+      <ol>
+        <li>Conéctate al <strong>mismo Wi-Fi o red local</strong> que el profesor.</li>
+        <li>Abre en tu navegador el enlace HTTPS que te comparta el profesor (ej. <code>https://192.168.x.x:3443</code>) o escanea el <strong>código QR</strong>.</li>
+      </ol>
+      <div class="callout callout-warn">
+        <strong>¿Te salió una pantalla roja ("La conexión no es privada")?</strong> Es normal la primera vez en red local.
+        <ul>
+          <li><strong>En Windows (1 clic, quita la pantalla roja para siempre):</strong> haz clic en <a href="/cert/Instalar-Certificado-Windows.bat"><strong>Instalar Certificado Windows</strong></a>, ejecuta el archivo descargado y pulsa <strong>Sí</strong>. Luego abrirá con candado seguro.</li>
+          <li><strong>Opción rápida sin instalar nada:</strong> en la pantalla roja pulsa <em>"Configuración avanzada"</em> → <em>"Continuar al sitio"</em>.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">2</span> Elegir tu sesión de clase</h2>
+      <p>Al entrar al panel verás una lista con las <strong>sesiones habilitadas por el profesor</strong>:</p>
+      <ul>
+        <li>Pulsa <strong>▶ Entrar</strong> en la clase que te corresponda (por ejemplo: <em>"Clase 10:00 AM — Grupo B"</em>).</li>
+        <li><strong>Solo verás las sesiones que el profesor tenga habilitadas</strong> (las sesiones privadas o en borrador quedan ocultas).</li>
+        <li>Si necesitas cambiarte de sesión, haz clic en el botón <strong>📚 Sesiones</strong> en la barra superior.</li>
+        <li>Si una sesión está marcada como <strong>🔒 Cerrada</strong>, podrás consultar todas las respuestas y tareas pero no se podrán publicar nuevos aportes.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">3</span> Elige tu modo: 🌱 Modo Fácil o ⚡ Modo Completo</h2>
+      <p>En la barra superior puedes cambiar el nivel de la interfaz en cualquier momento con un clic:</p>
+      <div class="grid-2">
+        <div class="box">
+          <h3>🌱 Modo Fácil (principiantes)</h3>
+          <ul>
+            <li>Botones y letras más grandes y claros.</li>
+            <li>Oculta herramientas técnicas que no necesitas.</li>
+            <li>Muestra arriba dos botones directos: <strong>1. Escribir o subir foto</strong> y <strong>2. Compartir mi pantalla</strong>.</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>⚡ Modo Completo (avanzado)</h3>
+          <ul>
+            <li>Incluye buscador, filtros por tema y colores de tarjeta.</li>
+            <li>Permite elegir tamaño de tarjetas (<code>Auto / Pequeño / Normal</code>) y ver <strong>Pantallas + Padlets</strong> juntos.</li>
+            <li>Atajos rápidos: <code>N</code> para publicar, <code>Ctrl+V</code> para pegar imágenes y <code>Esc</code> para cerrar ventanas.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">4</span> Ver los Temas de Tareas del profesor</h2>
+      <p>En la parte superior verás los <strong>📌 Temas de Tareas</strong> en tarjetas pequeñas para que no ocupen espacio:</p>
+      <ul>
+        <li><strong>Haz clic en una tarea pequeña</strong> para agrandarla y leer todas las instrucciones e imagen de referencia.</li>
+        <li>Usa <strong>📋 Copiar instrucciones</strong> si quieres copiar el texto.</li>
+        <li>Usa <strong>＋ Publicar mi aporte sobre esta tarea</strong> para responder con el tema ya escrito automáticamente.</li>
+        <li>Pulsa <strong>⤡ Reducir</strong> (o vuelve a hacer clic en la tarjeta pequeña) para cerrarla.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">5</span> Publicar en Padlets (texto, enlaces o imágenes)</h2>
+      <ol>
+        <li>Asegúrate de estar en la pestaña <strong>📋 Padlets</strong>.</li>
+        <li>Pulsa <strong>+ Publicar</strong> (o <strong>✍️ 1. Escribir o subir foto</strong> en Modo Fácil).</li>
+        <li>Escribe <strong>Tu nombre</strong> (se guarda automáticamente para la próxima vez), el <strong>Tema</strong> y tu <strong>Contenido</strong>.</li>
+        <li>Si deseas agregar una foto, haz clic en el recuadro de imagen, arrastra un archivo o pega una captura con <code>Ctrl+V</code>.</li>
+        <li>Pulsa <strong>Publicar Padlet</strong>. Aparecerá al instante para todos.</li>
+      </ol>
+      <div class="callout callout-ok">
+        <strong>Consejos útiles sobre las tarjetas:</strong>
+        <ul>
+          <li><strong>Mover respuestas arrastrándolas (Drag & Drop):</strong> toma el icono <code>⠿</code> en la cabecera de la tarjeta para moverla de lugar en la pizarra. El nuevo orden se actualizará para todos en tiempo real.</li>
+          <li><strong>⭐ Destacar respuestas:</strong> haz clic en la estrella <code>☆</code> para destacar una respuesta brillante con un marco dorado. Puedes pulsar <strong>⭐ Destacadas</strong> en la barra de temas para ver solo las destacadas.</li>
+          <li><strong>Muchas respuestas:</strong> cuando hay 6 o más respuestas, las tarjetas se muestran pequeñas; <strong>haz clic sobre cualquier tarjeta pequeña para agrandarla</strong> y en <code>⤡</code> para volverla pequeña.</li>
+          <li><strong>Visto verde <code>✓✓ Revisada</code>:</strong> indica que el profesor ya vio y revisó tu publicación.</li>
+          <li><strong>Editar / Eliminar:</strong> solo tú (y el profesor) pueden modificar o borrar tus propias tarjetas.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">6</span> Compartir tu pantalla o pedir turno en la Cola</h2>
+      <p>Las pantallas compartidas tienen su propia pestaña separada (<strong>🖥️ Pantallas y Cola</strong>) para no mezclarse con los Padlets.</p>
+      <ol>
+        <li>Pulsa el botón <strong>🖥️ Pantalla</strong> arriba (o entra a <strong>🖥️ Pantallas y Cola</strong> → <strong>+ Pedir turno</strong>).</li>
+        <li>Solo llena <strong>Tu nombre</strong> y el <strong>Motivo</strong> (por ejemplo: <em>"Duda en el paso 2"</em>).</li>
+        <li>Elige:
+          <ul>
+            <li><strong>🙋 Pedir turno (encolar):</strong> entras a la lista de espera. Cuando el profesor te dé turno, te aparecerá un aviso con sonido y el botón <strong>▶ Compartir pantalla ahora</strong>.</li>
+            <li><strong>🖥️ Compartir ahora:</strong> elige la pantalla o ventana que quieres mostrar y comenzará a verse en vivo.</li>
+          </ul>
+        </li>
+      </ol>
+      <div class="callout callout-info">
+        <strong>Control del profesor:</strong> si el profesor corta temporalmente tu pantalla, verás el aviso <em>"Pantalla cortada por el profesor"</em>. No cierres nada: cuando vuelva a ser tu turno, el profesor puede retomarla al instante. Para ver la pantalla de otro compañero en grande, pulsa <strong>⛶ Ver grande</strong>.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">7</span> Avisos del profesor, Recesos y Tests / Quiz en vivo</h2>
+      <ul>
+        <li><strong>Notificaciones:</strong> los anuncios del profesor aparecen arriba a la derecha con un tono. Puedes releer avisos anteriores en el icono de <strong>campana (🔔)</strong>.</li>
+        <li><strong>Recesos y temporizadores:</strong> cuando el profesor activa o programa un receso, verás una barra superior con el tiempo restante sincronizado, la hora de regreso y el botón <strong>⛶ Pantalla grande</strong>.</li>
+        <li><strong>Tests / Quiz en vivo:</strong> cuando el profesor publique un test de opción múltiple, aparecerá una barra morada arriba y una ventana con la pregunta y su tiempo restante. Elige tu opción (<code>A, B, C, D...</code>) antes de que el reloj llegue a <code>0s</code>; al finalizar verás si acertaste y el porcentaje de entendimiento del grupo.</li>
+        <li><strong>Ayuda siempre disponible:</strong> haz clic en el icono de libro <strong>📖</strong> en la barra superior para abrir este manual completo cuando lo necesites, o en <strong><code>?</code></strong> para ver la guía rápida.</li>
+      </ul>
+    </section>
+
+    <section class="section" style="background: linear-gradient(135deg, rgba(79,70,229,0.06), rgba(16,185,129,0.06)); border-color: rgba(79,70,229,0.3);">
+      <h2><span class="num">8</span> Sobre CoDevNexus</h2>
+      <p><strong>CoDevNexus</strong> (Código + Desarrollo + Unión) es una firma especializada en ingeniería de software y arquitectura tecnológica. Nos dedicamos a crear ecosistemas digitales robustos, integrando desarrollo Full-Stack, infraestructura de servidores, redes empresariales, sistemas de seguridad electrónica e IoT.</p>
+      <p style="margin-bottom:0;">
+        🌐 <strong>Sitio Web:</strong> <a href="https://www.codevnexus.tech" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">www.codevnexus.tech</a><br />
+        ✉️ <strong>Soporte y Contacto:</strong> <a href="mailto:jmejia@codevnexus.tech" style="color:var(--primary);font-weight:600;">jmejia@codevnexus.tech</a>
+      </p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "padlet-local",
+  "version": "1.2.0",
+  "description": "Aplicación web tipo Padlet local en red LAN para cursos privados con sincronización en tiempo real y pantalla compartida mediante WebRTC",
+  "main": "server.js",
+  "author": "CoDevNexus <jmejia@codevnexus.tech> (https://www.codevnexus.tech)",
+  "homepage": "https://www.codevnexus.tech",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codevnexus/PadletLocal.git"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "padlet",
+    "lan",
+    "realtime",
+    "socket.io",
+    "webrtc",
+    "screen-sharing"
+  ],
+  "license": "SEE LICENSE IN LICENSE.md",
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "node-forge": "^1.4.3",
+    "qrcode": "^1.5.4",
+    "selfsigned": "^2.4.1",
+    "socket.io": "^4.8.1"
+  }
+}

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manual del Profesor — PadletLocal</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #475569;
+      --primary: #4f46e5;
+      --primary-soft: #eef2ff;
+      --emerald: #059669;
+      --emerald-soft: #ecfdf5;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      z-index: 10;
+    }
+    .topbar strong { font-size: 1.05rem; }
+    .topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 9px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: var(--text);
+      font-size: 0.86rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--emerald);
+      border-color: var(--emerald);
+      color: #fff;
+    }
+    .container {
+      max-width: 920px;
+      margin: 24px auto 60px;
+      padding: 0 18px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #065f46, #059669);
+      color: #fff;
+      border-radius: 18px;
+      padding: 28px 26px;
+      margin-bottom: 22px;
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 1.7rem; }
+    .hero p { margin: 0; opacity: 0.92; font-size: 0.98rem; }
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 1.18rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--emerald);
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    p, li { color: var(--muted); font-size: 0.94rem; }
+    ul, ol { margin: 8px 0; padding-left: 22px; }
+    li { margin-bottom: 6px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { background: #f8fafc; color: var(--text); font-weight: 700; }
+    .callout {
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    .callout-info { background: var(--primary-soft); border-left: 4px solid var(--primary); }
+    .callout-ok { background: var(--emerald-soft); border-left: 4px solid var(--emerald); }
+    .callout-warn { background: var(--amber-soft); border-left: 4px solid #d97706; }
+    code {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.85rem;
+      color: #0f172a;
+    }
+    @media print {
+      .topbar { display: none; }
+      body { background: #fff; }
+      .section { break-inside: avoid; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <strong>🎓 Manual del Profesor — PadletLocal</strong>
+    <div class="topbar-actions">
+      <button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+      <a class="btn" href="/manual-usuarios.html">📖 Manual de Usuarios</a>
+      <a class="btn btn-primary" href="/">← Volver al panel</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="hero">
+      <h1>Manual de Administración y Docencia</h1>
+      <p>Control total del servidor local, certificados sin pantalla roja, tareas, notificaciones en tiempo real, recesos programados, cola de pantallas y revisión de aportes.</p>
+    </div>
+
+    <section class="section">
+      <h2><span class="num">1</span> Panel de Control en Windows (<code>PadletLocal.bat</code>)</h2>
+      <p>Haz doble clic en <strong><code>PadletLocal.bat</code></strong> en la carpeta principal para controlar todo sin usar comandos:</p>
+      <table>
+        <thead>
+          <tr><th>Opción</th><th>Descripción</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>[1]</code> Iniciar servidor</td><td>Genera/verifica los certificados CA + HTTPS antes de arrancar, ofrece confiar el certificado en este equipo e inicia el servidor en segundo plano.</td></tr>
+          <tr><td><code>[2]</code> Detener servidor</td><td>Detiene de forma segura el proceso Node.js de PadletLocal.</td></tr>
+          <tr><td><code>[3]</code> Reiniciar servidor</td><td>Reinicia el servidor para aplicar cambios de PIN, puertos o certificados.</td></tr>
+          <tr><td><code>[4]</code> Abrir navegador</td><td>Abre directamente la dirección HTTPS local.</td></tr>
+          <tr><td><code>[5]</code> PIN / Puertos</td><td>Cambia el <strong>PIN del Profesor</strong> (por defecto <code>1234</code>) y puertos HTTP/HTTPS.</td></tr>
+          <tr><td><code>[6]</code> Ver registro</td><td>Muestra las últimas líneas de <code>data/server.log</code> y posibles errores.</td></tr>
+          <tr><td><code>[7]</code> Firewall Windows</td><td>Abre los puertos TCP <code>3000</code> y <code>3443</code> en redes privadas (requiere Admin).</td></tr>
+          <tr><td><code>[8]</code> Certificado CA local</td><td>Instala <code>PadletLocal Root CA</code> en este PC para eliminar la pantalla roja de HTTPS.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">2</span> Conectar a la clase sin pantalla roja</h2>
+      <ol>
+        <li>Haz clic en el botón <strong>Red local</strong> en la barra superior para mostrar el enlace <strong>HTTPS</strong> y el <strong>código QR</strong>.</li>
+        <li>Para que los alumnos entren a HTTPS <strong>sin advertencia roja</strong> (se hace solo 1 vez por equipo):
+          <ul>
+            <li><strong>Windows (1 clic, sin necesitar admin):</strong> comparten el archivo <code>http://&lt;IP&gt;:3000/cert/Instalar-Certificado-Windows.bat</code> (también disponible en el botón <strong>Red local</strong>). Al ejecutarlo y pulsar <em>Sí</em>, abre HTTPS seguro.</li>
+            <li><strong>Android / iPhone / Mac:</strong> descargan <code>PadletLocal-RootCA.crt</code> desde el mismo modal y lo instalan como certificado raíz de confianza.</li>
+          </ul>
+        </li>
+        <li>Si algún alumno no logra conectarse, verifica que esté en la misma red Wi-Fi y ejecuta la opción <code>[7]</code> (Firewall) en <code>PadletLocal.bat</code>.</li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">3</span> Desbloquear el Modo Profesor</h2>
+      <p>Pulsa el botón <strong>Profesor</strong> en la barra superior e ingresa tu <strong>PIN</strong> (por defecto <code>1234</code>). El botón pasará a color verde (<strong>Panel Profesor</strong>) y desbloqueará las 3 pestañas de control docente más las herramientas en cada tarjeta.</p>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">4</span> Publicar Temas de Tareas</h2>
+      <p>En <strong>Panel Profesor → <code>📝 Siguiente Tarea</code></strong>:</p>
+      <ul>
+        <li>Escribe el <strong>Título</strong>, una <strong>etiqueta/hora de entrega</strong> y escribe o pega las <strong>instrucciones y enlaces</strong>.</li>
+        <li>Puedes adjuntar una <strong>imagen de referencia</strong> o pegar una captura con <code>Ctrl+V</code>.</li>
+        <li>Las tareas se muestran arriba en <strong>tarjetas pequeñas compactas</strong>; cada alumno hace clic en la que desea ver para agrandarla.</li>
+        <li>Al publicar una nueva tarea, la anterior se guarda en el historial (visible también en formato pequeño y recargable con el botón <strong>Cargar</strong>).</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">5</span> Enviar Notificaciones y Programar Recesos</h2>
+      <ul>
+        <li><strong>📢 Notificar:</strong> usa los <em>avisos rápidos</em> de 1 clic o escribe un mensaje con tipo (<code>Información</code>, <code>Tarea</code>, <code>Urgente</code>, <code>Receso</code>) y tono de alerta offline.</li>
+        <li><strong>⏱ Recesos y Timers:</strong>
+          <ul>
+            <li><strong>Iniciar ahora:</strong> elige presets (5 a 30 min) o minutos personalizados.</li>
+            <li><strong>Programar a una hora:</strong> fija una hora exacta (ej. <code>11:30</code>) y duración. Todos ven el conteo previo y el servidor inicia y cierra el receso automáticamente con sonido.</li>
+            <li>Durante el countdown puedes usar <strong>Pausar/Reanudar</strong>, <strong>+5 min</strong>, <strong>Finalizar</strong> y <strong>⛶ Pantalla grande</strong> para proyectar en el aula.</li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">6</span> Cola de Pantallas y Control de Transmisiones</h2>
+      <p>En la pestaña <strong>🖥️ Pantallas y Cola</strong>:</p>
+      <ul>
+        <li><strong>Cola de compartidos:</strong> ves a los alumnos en espera con su <strong>nombre</strong> y <strong>motivo</strong>. Pulsa <strong>▶ Dar turno</strong> para enviarle una alerta sonora y un botón de 1 clic para compartir su pantalla, o <strong>✕</strong> para sacarlo de la cola.</li>
+        <li><strong>✂ Cortar pantalla:</strong> oculta y silencia la pantalla del alumno al instante para toda la clase sin romper su sesión.</li>
+        <li><strong>▶ Retomar pantalla:</strong> vuelve a mostrar su pantalla inmediatamente en vivo.</li>
+        <li><strong>✕ Terminar:</strong> detiene definitivamente la captura en el equipo del alumno.</li>
+        <li><strong>🖥️ Pedir retomar:</strong> invita en 1 clic al autor de una tarjeta de pantalla detenida a volver a compartir.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">7</span> Revisión, Destacar, Reordenar (Drag & Drop) y Moderación de Padlets</h2>
+      <ul>
+        <li><strong>⠿ Mover respuestas arrastrándolas (Drag & Drop):</strong> cada tarjeta posee en su cabecera el icono de agarre <code>⠿</code>. Haz clic sostenido sobre la tarjeta o icono y arrástrala a la posición que desees. La línea azul mostrará la posición de inserción y el nuevo orden se sincronizará inmediatamente en todas las pantallas.</li>
+        <li><strong>⭐ Destacar respuestas:</strong> haz clic en la estrella <code>☆</code> de cualquier tarjeta para marcarla como <code>⭐ Destacada</code>. Recibirá un borde dorado y podrás filtrarla rápidamente con el botón <strong>⭐ Destacadas</strong> en la barra de temas.</li>
+        <li><strong>✓ Revisar (visto verde):</strong> haz clic en <strong>✓ Revisar</strong> para marcar la respuesta como <strong>✓✓ Revisada</strong>. Usa los filtros <em>Pendientes</em> y <em>✓ Revisadas</em> para ordenar tu flujo de corrección.</li>
+        <li><strong>🚫 Despublicar / Ocultar post no deseado:</strong> si un participante publica contenido fuera de lugar o spam, haz clic en el icono <strong>🚫</strong> de la tarjeta. Se ocultará de inmediato para todos los alumnos (desaparece de sus pantallas) mientras tú la ves con borde punteado rojo y la etiqueta <em>🚫 Despublicada</em>. Puedes volver a publicarla con <strong>👁️</strong> o eliminarla definitivamente con <strong>🗑️</strong>.</li>
+        <li>También puedes <strong>fijar tarjetas arriba (📌)</strong>, editarlas o eliminarlas.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">8</span> Tests / Quiz de Opción Múltiple, Entendimiento y Copia entre Sesiones</h2>
+      <p>En <strong>Panel Profesor → <code>🧠 Tests / Quiz</code></strong> puedes evaluar la comprensión del grupo en tiempo real:</p>
+      <ul>
+        <li><strong>Crear previamente como borrador:</strong> pulsa <strong>＋ Crear nuevo test</strong>, añade preguntas con 2 a 6 opciones, marca la respuesta correcta y define el <strong>tiempo en segundos para cada pregunta</strong>. Al guardar, el test permanece oculto para los alumnos hasta que decidas publicarlo.</li>
+        <li><strong>Publicar en vivo:</strong> pulsa <strong>▶ Publicar</strong> cuando estés listo. Cada pregunta corre con su cuenta regresiva; al terminar el tiempo (o al pulsar <strong>👁 Revelar ahora</strong>), todos ven la respuesta correcta y el porcentaje de acierto.</li>
+        <li><strong>Analizar el porcentaje de entendimiento:</strong> al finalizar (o en cualquier momento desde <strong>📊 Análisis</strong>), verás el <strong>% global de entendimiento</strong>, qué preguntas quedaron por debajo del 60% para reforzar, el desglose por opción, el resultado por participante y un botón <strong>📋 Copiar resumen</strong>.</li>
+        <li><strong>Copiar entre sesiones:</strong> usa <strong>📋 Copiar</strong> en cualquier test para enviarlo limpio (sin respuestas viejas) a otra clase del día, o <strong>📥 Traer de otra sesión</strong> para importarlo hacia la sesión actual.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">9</span> Selector de Sesión de Entrada, Sesiones de Clase y Moderación</h2>
+      <p>En <strong>Panel Profesor → <code>📚 Sesiones y Limpieza</code></strong> y en el botón <strong>📚 Sesiones</strong> de la barra superior:</p>
+      <ul>
+        <li><strong>Elegir sesión al entrar:</strong> al ingresar a la plataforma, tanto alumnos como profesor eligen en qué sesión van a trabajar. Los alumnos <strong>solo ven y pueden entrar a las sesiones habilitadas</strong> por el profesor.</li>
+        <li><strong>Crear nueva sesión de clase:</strong> escribe el nombre (ej. <em>"10:00 AM — Grupo 2B"</em>), marca si deseas <em>Habilitarla inmediatamente para alumnos</em> o dejarla como borrador despublicado, y pulsa <strong>＋ Crear sesión</strong>.</li>
+        <li><strong>📢 Publicar o 👁️‍🗨️ Despublicar sesión:</strong> permite preparar clases antes de tiempo. Si despublicas una sesión mientras hay alumnos dentro, son trasladados de forma segura al selector de sesiones habilitadas.</li>
+        <li><strong>🔒 Cerrar sesión (modo solo lectura):</strong> impide que los alumnos publiquen o compartan pantalla, pero les permite leer las respuestas, tareas y calificaciones.</li>
+        <li><strong>Cambiar, renombrar o eliminar sesiones:</strong> pulsa <strong>▶ Entrar</strong> para cambiarte de sesión en cualquier momento, <strong>✏️</strong> para renombrarla o <strong>🗑️</strong> para eliminarla junto con sus archivos.</li>
+        <li><strong>🧹 Limpiar solo respuestas:</strong> borra todos los Padlets y pantallas de la sesión actual conservando los Temas de Tareas (ideal para reutilizar la misma tarea con otro grupo).</li>
+        <li><strong>🔄 Reiniciar sesión completa:</strong> deja la sesión actual completamente en blanco (borra respuestas, tareas, avisos y temporizadores).</li>
+      </ul>
+      <div class="callout callout-ok">
+        <strong>Acceso directo al manual y respaldo local:</strong> el icono de libro <strong>📖</strong> en la barra superior abre automáticamente este Manual del Profesor cuando estás en Modo Profesor (y el Manual de Usuarios para los alumnos). Los datos se guardan en <code>data/posts.json</code>, las imágenes en <code>uploads/</code> y los certificados en <code>certs/</code>.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2><span class="num">10</span> Actualización Segura del Sistema</h2>
+      <p>PadletLocal protege 100% tus datos y clases creadas para que nunca se borren al actualizar:</p>
+      <ul>
+        <li>Abre <code>PadletLocal.bat</code> y selecciona la opción <strong>[9] Buscar y aplicar actualizaciones (Git / Backup Seguro)</strong>.</li>
+        <li>El sistema genera un respaldo automático en <code>data/backups/</code> y actualiza el código desde GitHub de forma segura.</li>
+        <li>En la web puedes pulsar el botón <strong>⚡ CoDevNexus</strong> en la barra superior y hacer clic en <strong>Buscar actualizaciones</strong> para ver el estado de tu versión.</li>
+      </ul>
+    </section>
+
+    <section class="section" style="background: linear-gradient(135deg, rgba(79,70,229,0.06), rgba(16,185,129,0.06)); border-color: rgba(79,70,229,0.3);">
+      <h2><span class="num">11</span> Sobre CoDevNexus y Soporte</h2>
+      <p><strong>CoDevNexus</strong> (Código + Desarrollo + Unión) es una firma especializada en ingeniería de software y arquitectura tecnológica. Nos dedicamos a crear ecosistemas digitales robustos, integrando desarrollo Full-Stack, infraestructura de servidores, redes empresariales, sistemas de seguridad electrónica e IoT. Transformamos necesidades operativas complejas en herramientas eficientes, escalables y seguras.</p>
+      <p style="margin-bottom:0;">
+        🌐 <strong>Sitio Web:</strong> <a href="https://www.codevnexus.tech" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">www.codevnexus.tech</a><br />
+        ✉️ <strong>Soporte y Contacto:</strong> <a href="mailto:jmejia@codevnexus.tech" style="color:var(--primary);font-weight:600;">jmejia@codevnexus.tech</a>
+      </p>
+    </section>
+  </main>
+</body>
+</html>

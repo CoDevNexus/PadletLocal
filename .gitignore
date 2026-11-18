@@ -1,0 +1,38 @@
+# ==============================================================
+# PadletLocal - Reglas de exclusión para Git
+# CoDevNexus - www.codevnexus.tech
+# ==============================================================
+
+# Dependencias de paquetes
+node_modules/
+package-lock.json
+
+# Datos y sesiones de usuario (100% protegidos contra sobrescrituras)
+data/*
+!data/.gitkeep
+!data/posts.template.json
+data/posts.json
+data/panel.cfg
+data/backups/
+data/*.log
+data/*.pid
+
+# Archivos multimedia subidos por usuarios
+uploads/*
+!uploads/.gitkeep
+
+# Certificados HTTPS generados localmente (claves privadas de red)
+certs/*
+!certs/.gitkeep
+
+# Registros de depuración y ejecución
+*.log
+*.pid
+npm-debug.log*
+yarn-debug.log*
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini

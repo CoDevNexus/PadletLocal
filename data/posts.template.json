@@ -1,0 +1,24 @@
+{
+  "activeSessionId": "default-class-session",
+  "sessions": [
+    {
+      "id": "default-class-session",
+      "name": "Clase Principal",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "isPublished": true,
+      "isClosed": false,
+      "board": {
+        "title": "Clase Principal",
+        "description": "Panel colaborativo en red local — comparte ideas, imágenes y tu pantalla en tiempo real."
+      },
+      "posts": [],
+      "assignment": null,
+      "assignmentHistory": [],
+      "notifications": [],
+      "timer": null,
+      "scheduledTimers": [],
+      "quizzes": [],
+      "activeQuiz": null
+    }
+  ]
+}
