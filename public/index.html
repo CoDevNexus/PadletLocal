@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PadletLocal — Panel Colaborativo en Red Local</title>
-  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="stylesheet" href="/css/styles.css?v=1.3.0" />
   <script>
     window.addEventListener('error', function(e) {
       try {
@@ -1913,8 +1913,54 @@
           <input id="inputBoardInstitution" type="text" maxlength="100" placeholder="Ej. Universidad / Colegio / Centro de Formación" />
         </div>
         <div class="form-group">
-          <label for="inputBoardLogo">Logo de la institución (URL o imagen)</label>
-          <input id="inputBoardLogo" type="text" maxlength="500" placeholder="https://... o /uploads/... (deja vacío para logo por defecto)" />
+          <label>Logo de la institución</label>
+          <div class="board-logo-uploader-row">
+            <div id="boardLogoPreviewBox" class="board-logo-preview-box">
+              <img id="boardLogoPreviewImg" src="" class="hidden" alt="Vista previa logo" />
+              <span id="boardLogoPreviewDefault" class="board-logo-preview-default">🏫</span>
+            </div>
+            <div class="board-logo-uploader-actions">
+              <input type="file" id="inputBoardLogoFile" accept="image/*" class="hidden" />
+              <button type="button" id="btnUploadBoardLogo" class="btn btn-sm btn-secondary">📁 Cargar imagen de logo</button>
+              <button type="button" id="btnRemoveBoardLogo" class="btn btn-sm btn-ghost" title="Restablecer logo por defecto">✕ Quitar logo</button>
+            </div>
+          </div>
+          <input id="inputBoardLogo" type="text" maxlength="500" placeholder="/uploads/... o https://... (o carga un archivo arriba)" style="margin-top:8px;" />
+        </div>
+
+        <div class="form-group">
+          <label>Formato y proporción del logo:</label>
+          <div class="logo-shape-radios">
+            <label class="logo-shape-label">
+              <input type="radio" name="boardLogoShape" value="square" checked />
+              <div class="logo-shape-option-card">
+                <span class="logo-shape-icon">⬛</span>
+                <div>
+                  <strong>Cuadrado / Escudo (1:1)</strong>
+                  <small>Para insignias, sellos o escudos circulares / cuadrados</small>
+                </div>
+              </div>
+            </label>
+            <label class="logo-shape-label">
+              <input type="radio" name="boardLogoShape" value="wide" />
+              <div class="logo-shape-option-card">
+                <span class="logo-shape-icon">▬</span>
+                <div>
+                  <strong>Horizontal / Largo (Rectangular)</strong>
+                  <small>Para logotipos apaisados o alargados con texto de la institución</small>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="selectBoardLogoSize">Tamaño de visualización en la cabecera:</label>
+          <select id="selectBoardLogoSize" class="select-input">
+            <option value="compact">Compacto (Discreto, 34px de alto)</option>
+            <option value="normal" selected>Normal (Recomendado, 44px de alto)</option>
+            <option value="large">Grande / Destacado (54px de alto)</option>
+          </select>
         </div>
         <div class="form-group">
           <label for="inputBoardTitle">Nombre del evento que se realiza</label>
@@ -2329,9 +2375,9 @@
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/swal-local.js"></script>
-  <script src="/js/webrtc.js"></script>
-  <script src="/js/app.js"></script>
-  <script src="/js/quiz.js"></script>
+  <script src="/js/swal-local.js?v=1.3.0"></script>
+  <script src="/js/webrtc.js?v=1.3.0"></script>
+  <script src="/js/app.js?v=1.3.0"></script>
+  <script src="/js/quiz.js?v=1.3.0"></script>
 </body>
 </html>

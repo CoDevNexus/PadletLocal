@@ -755,6 +755,13 @@
     boardEditForm: document.getElementById('boardEditForm'),
     inputBoardInstitution: document.getElementById('inputBoardInstitution'),
     inputBoardLogo: document.getElementById('inputBoardLogo'),
+    inputBoardLogoFile: document.getElementById('inputBoardLogoFile'),
+    btnUploadBoardLogo: document.getElementById('btnUploadBoardLogo'),
+    btnRemoveBoardLogo: document.getElementById('btnRemoveBoardLogo'),
+    boardLogoPreviewBox: document.getElementById('boardLogoPreviewBox'),
+    boardLogoPreviewImg: document.getElementById('boardLogoPreviewImg'),
+    boardLogoPreviewDefault: document.getElementById('boardLogoPreviewDefault'),
+    selectBoardLogoSize: document.getElementById('selectBoardLogoSize'),
     inputBoardTitle: document.getElementById('inputBoardTitle'),
     inputBoardDesc: document.getElementById('inputBoardDesc'),
     institutionLogoBox: document.getElementById('institutionLogoBox'),
@@ -982,18 +989,28 @@
 
   async function promptChangeNick() {
     const currentName = state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno');
-    const res = await Swal.prompt(
-      '✏️ Cambiar mi nombre / apodo',
-      state.isTeacher
-        ? 'Ingresa tu nombre o título como docente para la clase. Se actualizará en el encabezado, chat y publicaciones:'
-        : 'Ingresa tu nuevo nombre o apodo para la clase. Tus mensajes, publicaciones y en la lista de conectados se actualizarán de inmediato manteniendo tu identidad:',
-      {
-        inputValue: currentName,
-        inputPlaceholder: state.isTeacher ? 'Ej. Prof. García, Lic. María, etc.' : 'Ej. Juan Pérez, María G., etc.',
-        confirmButtonText: 'Guardar nombre',
-        confirmButtonColor: '#6366f1',
-      }
-    );
+    let res = null;
+    if (typeof Swal !== 'undefined' && typeof Swal.prompt === 'function') {
+      res = await Swal.prompt(
+        '✏️ Cambiar mi nombre / apodo',
+        state.isTeacher
+          ? 'Ingresa tu nombre o título como docente para la clase. Se actualizará en el encabezado, chat y publicaciones:'
+          : 'Ingresa tu nuevo nombre o apodo para la clase. Tus mensajes, publicaciones y en la lista de conectados se actualizarán de inmediato manteniendo tu identidad:',
+        {
+          inputValue: currentName,
+          inputPlaceholder: state.isTeacher ? 'Ej. Prof. García, Lic. María, etc.' : 'Ej. Juan Pérez, María G., etc.',
+          confirmButtonText: 'Guardar nombre',
+          confirmButtonColor: '#6366f1',
+        }
+      );
+    } else {
+      res = window.prompt(
+        state.isTeacher
+          ? 'Ingresa tu nombre o título como docente para la clase:'
+          : 'Ingresa tu nuevo nombre o apodo para la clase:',
+        currentName
+      );
+    }
     if (!res || !res.trim()) return;
     const newNick = res.trim().slice(0, 50);
     if (newNick === currentName) return;
@@ -3851,12 +3868,6 @@
     if (el.chatSessionBadge) {
       el.chatSessionBadge.textContent = state.board?.title || 'Clase';
     }
-    if (Array.isArray(state.chatUsers)) {
-      state.chatUsers.forEach((u) => {
-        if (u.authorId === changedAuthorId) u.name = newName;
-      });
-      renderChatUsers(state.chatUsers);
-    }
 
     if (state.isChatOpen) {
       socket.emit('chat:history', { sessionId: state.activeSessionId }, (res) => {
@@ -4354,6 +4365,22 @@
 
     if (el.boardDescription) {
       el.boardDescription.textContent = state.board?.description || '';
+    }
+
+    const instLogoShape = state.board?.institutionLogoShape === 'wide' ? 'wide' : 'square';
+    const instLogoSize = ['compact', 'large'].includes(state.board?.institutionLogoSize)
+      ? state.board.institutionLogoSize
+      : 'normal';
+
+    if (el.institutionLogoBox) {
+      el.institutionLogoBox.classList.remove(
+        'logo-shape-square',
+        'logo-shape-wide',
+        'logo-size-compact',
+        'logo-size-normal',
+        'logo-size-large'
+      );
+      el.institutionLogoBox.classList.add(`logo-shape-${instLogoShape}`, `logo-size-${instLogoSize}`);
     }
 
     if (el.institutionLogoImg && el.institutionLogoDefault) {
@@ -6681,6 +6708,22 @@
     renderBoardFull();
   });
 
+  function updateModalLogoPreview(url, shape) {
+    const isWide = shape === 'wide';
+    if (el.boardLogoPreviewBox) {
+      el.boardLogoPreviewBox.classList.toggle('is-wide', isWide);
+    }
+    if (url && el.boardLogoPreviewImg && el.boardLogoPreviewDefault) {
+      el.boardLogoPreviewImg.src = url;
+      el.boardLogoPreviewImg.classList.remove('hidden');
+      el.boardLogoPreviewDefault.classList.add('hidden');
+    } else if (el.boardLogoPreviewImg && el.boardLogoPreviewDefault) {
+      el.boardLogoPreviewImg.src = '';
+      el.boardLogoPreviewImg.classList.add('hidden');
+      el.boardLogoPreviewDefault.classList.remove('hidden');
+    }
+  }
+
   function openBoardEditModalForTeacher() {
     if (!state.isTeacher) {
       showToast('Acceso restringido. Solo el profesor puede editar la institución y el evento.', 'error');
@@ -6689,9 +6732,22 @@
     if (el.inputBoardInstitution) {
       el.inputBoardInstitution.value = (state.board.institutionName || 'Institución Educativa').replace(/^🏫\s*/, '');
     }
+    const currentLogo = state.board.institutionLogo || '';
+    const currentShape = state.board.institutionLogoShape === 'wide' ? 'wide' : 'square';
+    const currentSize = state.board.institutionLogoSize || 'normal';
+
     if (el.inputBoardLogo) {
-      el.inputBoardLogo.value = state.board.institutionLogo || '';
+      el.inputBoardLogo.value = currentLogo;
     }
+    const radio = document.querySelector(`input[name="boardLogoShape"][value="${currentShape}"]`);
+    if (radio) radio.checked = true;
+
+    if (el.selectBoardLogoSize) {
+      el.selectBoardLogoSize.value = currentSize;
+    }
+
+    updateModalLogoPreview(currentLogo, currentShape);
+
     el.inputBoardTitle.value = state.board.eventName || state.board.title || '';
     el.inputBoardDesc.value = state.board.description || '';
     openModal(el.boardEditModal);
@@ -6709,6 +6765,77 @@
     });
   }
 
+  // Handle uploading logo directly from local file
+  el.btnUploadBoardLogo?.addEventListener('click', () => {
+    el.inputBoardLogoFile?.click();
+  });
+
+  el.inputBoardLogoFile?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      showToast('Por favor selecciona un archivo de imagen válido', 'error');
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo subir el logo');
+      }
+      const data = await res.json();
+      const uploadedUrl = data.imageUrl;
+      if (el.inputBoardLogo) el.inputBoardLogo.value = uploadedUrl;
+
+      // Detect natural image dimensions to recommend/auto-select format (wide vs square)
+      const testImg = new Image();
+      testImg.onload = () => {
+        const isWide = (testImg.naturalWidth / testImg.naturalHeight) > 1.25;
+        const recommendedShape = isWide ? 'wide' : 'square';
+        const shapeRadio = document.querySelector(`input[name="boardLogoShape"][value="${recommendedShape}"]`);
+        if (shapeRadio) shapeRadio.checked = true;
+        updateModalLogoPreview(uploadedUrl, recommendedShape);
+        showToast(
+          isWide
+            ? 'Logo horizontal/largo detectado y ajustado automáticamente'
+            : 'Logo cuadrado/escudo detectado y ajustado automáticamente',
+          'success'
+        );
+      };
+      testImg.src = uploadedUrl;
+    } catch (err) {
+      showToast(err.message || 'Error al subir la imagen del logo', 'error');
+    }
+  });
+
+  el.btnRemoveBoardLogo?.addEventListener('click', () => {
+    if (el.inputBoardLogo) el.inputBoardLogo.value = '';
+    if (el.inputBoardLogoFile) el.inputBoardLogoFile.value = '';
+    const squareRadio = document.querySelector('input[name="boardLogoShape"][value="square"]');
+    if (squareRadio) squareRadio.checked = true;
+    updateModalLogoPreview('', 'square');
+    showToast('Logo restablecido al icono por defecto', 'info');
+  });
+
+  document.querySelectorAll('input[name="boardLogoShape"]').forEach((radio) => {
+    radio.addEventListener('change', (e) => {
+      const currentUrl = el.inputBoardLogo?.value?.trim() || '';
+      updateModalLogoPreview(currentUrl, e.target.value);
+    });
+  });
+
+  el.inputBoardLogo?.addEventListener('input', () => {
+    const url = el.inputBoardLogo.value.trim();
+    const checkedRadio = document.querySelector('input[name="boardLogoShape"]:checked');
+    const shape = checkedRadio ? checkedRadio.value : 'square';
+    updateModalLogoPreview(url, shape);
+  });
+
   el.boardEditForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!state.isTeacher) {
@@ -6719,6 +6846,9 @@
     const eventName = title;
     const institutionName = el.inputBoardInstitution ? el.inputBoardInstitution.value.trim() : '';
     const institutionLogo = el.inputBoardLogo ? el.inputBoardLogo.value.trim() : '';
+    const logoShapeRadio = document.querySelector('input[name="boardLogoShape"]:checked');
+    const institutionLogoShape = logoShapeRadio ? logoShapeRadio.value : 'square';
+    const institutionLogoSize = el.selectBoardLogoSize ? el.selectBoardLogoSize.value : 'normal';
     const description = el.inputBoardDesc.value.trim();
     if (!title) return;
     try {
@@ -6735,6 +6865,8 @@
           eventName,
           institutionName,
           institutionLogo,
+          institutionLogoShape,
+          institutionLogoSize,
           description,
         }),
       });

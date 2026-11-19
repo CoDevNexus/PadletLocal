@@ -37,6 +37,8 @@ function createBlankSession({
       eventName: cleanName,
       institutionName: 'Institución Educativa',
       institutionLogo: '',
+      institutionLogoShape: 'square', // 'square' | 'wide'
+      institutionLogoSize: 'normal',  // 'compact' | 'normal' | 'large'
       description: cleanDesc,
     },
     posts: [],
@@ -67,6 +69,8 @@ function normalizeSession(raw) {
       eventName: raw?.board?.eventName || raw?.board?.title || fallbackName,
       institutionName: raw?.board?.institutionName || 'Institución Educativa',
       institutionLogo: raw?.board?.institutionLogo || '',
+      institutionLogoShape: raw?.board?.institutionLogoShape || 'square',
+      institutionLogoSize: raw?.board?.institutionLogoSize || 'normal',
       description: raw?.board?.description ?? DEFAULT_BOARD_DESC,
     },
     posts: Array.isArray(raw?.posts)
@@ -471,7 +475,7 @@ class BoardStore {
   }
 
   updateBoard(
-    { title, description, institutionName, institutionLogo, eventName },
+    { title, description, institutionName, institutionLogo, institutionLogoShape, institutionLogoSize, eventName },
     sessionId = null
   ) {
     const session = this.resolveSession(sessionId);
@@ -496,6 +500,12 @@ class BoardStore {
     }
     if (typeof institutionLogo === 'string') {
       session.board.institutionLogo = institutionLogo.trim().slice(0, 500);
+    }
+    if (typeof institutionLogoShape === 'string') {
+      session.board.institutionLogoShape = institutionLogoShape === 'wide' ? 'wide' : 'square';
+    }
+    if (typeof institutionLogoSize === 'string') {
+      session.board.institutionLogoSize = ['compact', 'large'].includes(institutionLogoSize) ? institutionLogoSize : 'normal';
     }
     this.save();
     return session.board;

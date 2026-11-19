@@ -123,6 +123,141 @@ textarea {
   color: #ffffff;
 }
 
+/* Brand Logo sizing and shapes */
+.brand-logo.logo-size-compact {
+  height: 34px;
+}
+.brand-logo.logo-size-normal {
+  height: 44px;
+}
+.brand-logo.logo-size-large {
+  height: 54px;
+}
+
+.brand-logo.logo-shape-square.logo-size-compact {
+  width: 34px;
+}
+.brand-logo.logo-shape-square.logo-size-normal {
+  width: 44px;
+}
+.brand-logo.logo-shape-square.logo-size-large {
+  width: 54px;
+}
+
+.brand-logo.logo-shape-wide {
+  width: auto;
+  min-width: 44px;
+  max-width: 175px;
+  padding: 2px 8px;
+  background: #ffffff;
+}
+
+.brand-logo.logo-shape-wide .institution-logo-img {
+  width: auto;
+  max-width: 165px;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Modal Logo Uploader & Shape Selector */
+.board-logo-uploader-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--surface-muted, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.board-logo-preview-box {
+  width: 60px;
+  height: 50px;
+  border-radius: 10px;
+  border: 1.5px dashed var(--border-strong, #cbd5e1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.board-logo-preview-box.is-wide {
+  width: 100px;
+}
+
+.board-logo-preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.board-logo-preview-default {
+  font-size: 1.6rem;
+}
+
+.board-logo-uploader-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.logo-shape-radios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.logo-shape-label {
+  cursor: pointer;
+  display: block;
+}
+
+.logo-shape-label input[type='radio'] {
+  display: none;
+}
+
+.logo-shape-option-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card, #ffffff);
+  transition: all 0.15s ease;
+}
+
+.logo-shape-label input[type='radio']:checked + .logo-shape-option-card {
+  border-color: var(--primary, #4f46e5);
+  background: rgba(79, 70, 229, 0.06);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.logo-shape-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.logo-shape-option-card strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.logo-shape-option-card small {
+  display: block;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
 .brand-text {
   min-width: 0;
 }

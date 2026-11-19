@@ -198,7 +198,15 @@ const upload = multer({
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.text({ type: ['text/plain', 'application/json'], limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      }
+    },
+  })
+);
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 
 function enrichPost(post) {
@@ -868,6 +876,8 @@ app.patch('/api/board', (req, res) => {
         eventName: req.body?.eventName,
         institutionName: req.body?.institutionName,
         institutionLogo: req.body?.institutionLogo,
+        institutionLogoShape: req.body?.institutionLogoShape,
+        institutionLogoSize: req.body?.institutionLogoSize,
         description: req.body?.description,
       },
       sid
