@@ -541,6 +541,13 @@ class BoardStore {
       imageName: imageName ? String(imageName).slice(0, 150) : null,
       assignmentId: assignmentId ? String(assignmentId).slice(0, 80) : null,
       assignmentTitle: assignmentTitle ? String(assignmentTitle).trim().slice(0, 150) : null,
+      isTeacher: Boolean(
+        payload?.isTeacher ||
+        payload?.authorRole === 'teacher' ||
+        cleanAuthor === 'Profesor' ||
+        (session.teacherName && cleanAuthor === session.teacherName)
+      ),
+      authorRole: payload?.authorRole || (payload?.isTeacher || cleanAuthor === 'Profesor' ? 'teacher' : 'student'),
       pinned: false,
       reviewed: false,
       reviewedAt: null,

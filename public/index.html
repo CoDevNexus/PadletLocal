@@ -1893,8 +1893,9 @@
 
       <div class="modal-body post-detail-body">
         <h2 id="postDetailTopic" class="post-detail-topic">Tema de la publicación</h2>
-        <div id="postDetailImageWrap" class="post-detail-image-box hidden">
+        <div id="postDetailImageWrap" class="post-detail-image-box hidden" title="Clic para ver la imagen en pantalla completa">
           <img id="postDetailImage" class="post-detail-img" alt="Imagen adjunta de la publicación" />
+          <span class="post-detail-image-hint">🔍 Clic para ampliar en modal</span>
         </div>
         <div id="postDetailContent" class="post-detail-content-text"></div>
         <div id="postDetailCommentsWrap" class="post-detail-comments-box"></div>
@@ -2267,6 +2268,7 @@
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/swal-local.js"></script>
   <script src="/js/webrtc.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/quiz.js"></script>

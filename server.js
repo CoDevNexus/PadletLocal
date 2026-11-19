@@ -178,14 +178,22 @@ app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 
 function enrichPost(post) {
   const share = activeShares.get(post.id);
+  const isTeacher = Boolean(
+    post.isTeacher ||
+    post.authorRole === 'teacher' ||
+    post.author === 'Profesor'
+  );
   return {
     ...post,
+    isTeacher,
+    authorRole: isTeacher ? 'teacher' : (post.authorRole || 'student'),
     screenShare: share
       ? {
           active: true,
           sharerSocketId: share.sharerSocketId,
           sharerAuthorId: share.sharerAuthorId,
           sharerName: share.sharerName,
+          isTeacher: Boolean(share.isTeacher || isTeacher),
           sourceType: share.sourceType || 'screen',
           audience: share.audience || 'all',
           targetAuthorIds: Array.isArray(share.targetAuthorIds) ? share.targetAuthorIds : [],
@@ -1676,7 +1684,15 @@ io.on('connection', (socket) => {
       if (store.isAuthorDisabled(payload?.authorId, payload?.author, session.id)) {
         throw new Error('Tu cuenta está deshabilitada por el profesor. Solo puedes observar la clase.');
       }
-      const post = store.createPost(payload || {}, session.id);
+      const isTeacher = Boolean(socket.data.isTeacher || isValidTeacherToken(payload?.teacherToken));
+      const post = store.createPost(
+        {
+          ...(payload || {}),
+          isTeacher,
+          authorRole: isTeacher ? 'teacher' : (payload?.authorRole || 'student'),
+        },
+        session.id
+      );
       const enriched = enrichPost(post);
       emitPostToRoom(session.id, 'post:created', post);
       broadcastSessionsSummaryToAll();
@@ -2494,6 +2510,8 @@ io.on('connection', (socket) => {
         existing.reason = cleanReason;
         existing.audience = audience;
         existing.targetAuthorIds = targetAuthorIds;
+        existing.status = 'waiting';
+        existing.createdAt = new Date().toISOString();
         broadcastScreenQueue(session.id);
         if (typeof ack === 'function') ack({ ok: true, entry: existing, updated: true });
         return;
@@ -2615,11 +2633,13 @@ io.on('connection', (socket) => {
       }
 
       const sharerAuthorId = authorId || post.authorId;
+      const isTeacher = Boolean(socket.data.isTeacher || post.isTeacher || post.authorRole === 'teacher');
       const share = {
         sessionId: session.id,
         sharerSocketId: socket.id,
         sharerAuthorId,
         sharerName: authorName || post.author,
+        isTeacher,
         sourceType: sourceType || 'screen',
         audience, // 'all' | 'teacher' | 'custom'
         targetAuthorIds: Array.isArray(targetAuthorIds) ? targetAuthorIds : [],

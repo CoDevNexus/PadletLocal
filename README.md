@@ -16,6 +16,44 @@ Todos los textos, preguntas, tareas, imágenes y respuestas quedan almacenados d
 
 ---
 
+## 📸 Galería y Capturas del Sistema
+
+A continuación puedes apreciar la interfaz moderna e interactiva de **PadletLocal**:
+
+<div align="center">
+
+### 📋 1. Pizarra Colaborativa en Tiempo Real
+*Publicaciones organizadas, temas de tareas activas, reloj de clase, buscador rápido y modo compacto.*  
+![Pizarra Colaborativa PadletLocal](docs/screenshots/01-pizarra-principal.png)
+
+<br/>
+
+### 🖥️ 2. Transmisión de Pantalla en Vivo (WebRTC) y Cola de Turnos
+*Pantallas en tiempo real con prioridad docente, re-encolado ágil y selector de audiencia.*  
+![Transmisión de Pantalla WebRTC](docs/screenshots/02-pantalla-compartida-webrtc.png)
+
+<br/>
+
+### 💬 3. Chat Interactivo en Vivo de la Sesión
+*Mensajería fluida simultánea con la pizarra, sin bloqueos de pantalla, con canales públicos y privados.*  
+![Chat en Vivo PadletLocal](docs/screenshots/03-chat-en-vivo-drawer.png)
+
+<br/>
+
+### 🧠 4. Evaluaciones, Quizzes y Estadísticas Docentes
+*Cuestionarios con temporizador dinámico y métricas de acierto por pregunta exclusivas para el docente.*  
+![Evaluaciones y Quizzes](docs/screenshots/04-evaluaciones-quizzes.png)
+
+<br/>
+
+### ⚙️ 5. Panel de Control y Moderación Docente
+*Gestión de múltiples sesiones, control de participantes (expulsión y deshabilitación) y backup seguro.*  
+![Panel Docente](docs/screenshots/05-panel-docente-gestion.png)
+
+</div>
+
+---
+
 ## 🚀 Guía de Inicio Rápido para el Usuario
 
 ### 1. Iniciar la plataforma en la computadora anfitriona (Profesor)

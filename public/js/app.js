@@ -1375,12 +1375,16 @@
     openModal(el.composerModal);
   });
 
-  el.menuItemTeacherCleanBoard?.addEventListener('click', () => {
+  el.menuItemTeacherCleanBoard?.addEventListener('click', async () => {
     closeActionMenus();
-    if (confirm('¿Deseas archivar/limpiar todas las publicaciones del tablero en esta sesión?')) {
-      socket.emit('board:clear', { teacherToken: state.teacherToken });
-      showToast('Tablero limpiado');
-    }
+    const ok = await Swal.confirm(
+      '¿Archivar / limpiar tablero?',
+      '¿Deseas archivar y limpiar todas las publicaciones de esta sesión? Los datos quedarán a salvo en el historial.',
+      { icon: 'warning', confirmButtonText: 'Sí, limpiar', confirmButtonColor: '#ef4444' }
+    );
+    if (!ok) return;
+    socket.emit('board:clear', { teacherToken: state.teacherToken });
+    showToast('Tablero limpiado');
   });
 
   function openTeacherSettingsModal() {
@@ -1855,25 +1859,29 @@
     }
   }
 
-  function handleTeacherTaskDelete(task) {
+  async function handleTeacherTaskDelete(task) {
     if (!state.isTeacher || !task) return;
     const linkedCount = getPadletPosts().filter((p) => p.assignmentId === task.id).length;
     if (linkedCount === 0) {
-      if (window.confirm(`¿Eliminar permanentemente la tarea "${task.title}"?`)) {
-        socket.emit(
-          'teacher:assignment:delete',
-          {
-            teacherToken: state.teacherToken,
-            sessionId: state.activeSessionId,
-            assignmentId: task.id,
-            id: task.id,
-          },
-          (ack) => {
-            if (ack?.ok) showToast('Tarea eliminada del panel y del historial', 'success');
-            else showToast(ack?.error || 'Error al eliminar tarea', 'error');
-          }
-        );
-      }
+      const ok = await Swal.confirm(
+        '¿Eliminar tarea?',
+        `¿Eliminar permanentemente la tarea <strong>"${escapeHtml(task.title)}"</strong>?`,
+        { icon: 'warning', confirmButtonText: 'Sí, eliminar', confirmButtonColor: '#ef4444' }
+      );
+      if (!ok) return;
+      socket.emit(
+        'teacher:assignment:delete',
+        {
+          teacherToken: state.teacherToken,
+          sessionId: state.activeSessionId,
+          assignmentId: task.id,
+          id: task.id,
+        },
+        (ack) => {
+          if (ack?.ok) showToast('Tarea eliminada del panel y del historial', 'success');
+          else showToast(ack?.error || 'Error al eliminar tarea', 'error');
+        }
+      );
     } else {
       state.pendingCleanAssignmentId = task.id;
       state.pendingCleanAssignmentAction = 'delete';
@@ -2834,6 +2842,14 @@
     });
   }
 
+  function isTeacherPost(post) {
+    if (!post) return false;
+    if (post.isTeacher || post.authorRole === 'teacher' || post.authorIsTeacher) return true;
+    if (post.author === 'Profesor') return true;
+    if (state.board?.teacherName && post.author === state.board.teacherName) return true;
+    return false;
+  }
+
   function isScreenPost(post) {
     return post?.kind === 'screen';
   }
@@ -2843,12 +2859,26 @@
   }
 
   function getScreenPosts() {
+    const myAuthorId = authorId;
     return state.posts
       .filter((p) => isScreenPost(p))
       .sort((a, b) => {
         const aLive = a.screenShare?.active ? 1 : 0;
         const bLive = b.screenShare?.active ? 1 : 0;
         if (bLive !== aLive) return bLive - aLive;
+
+        // 1. Teacher screen ALWAYS first
+        const aIsTeacher = isTeacherPost(a) ? 1 : 0;
+        const bIsTeacher = isTeacherPost(b) ? 1 : 0;
+        if (bIsTeacher !== aIsTeacher) return bIsTeacher - aIsTeacher;
+
+        // 2. If student, student's own screen comes next
+        if (!state.isTeacher) {
+          const aIsMine = a.authorId === myAuthorId ? 1 : 0;
+          const bIsMine = b.authorId === myAuthorId ? 1 : 0;
+          if (bIsMine !== aIsMine) return bIsMine - aIsMine;
+        }
+
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
   }
@@ -2978,8 +3008,13 @@
     }
   });
 
-  el.btnClearQueue.addEventListener('click', () => {
-    if (!window.confirm('¿Limpiar toda la cola de compartidos?')) return;
+  el.btnClearQueue.addEventListener('click', async () => {
+    const ok = await Swal.confirm(
+      '¿Limpiar cola de compartidos?',
+      '¿Deseas quitar a todos los usuarios de la cola de espera para compartir pantalla?',
+      { icon: 'warning', confirmButtonText: 'Sí, limpiar cola', confirmButtonColor: '#ef4444' }
+    );
+    if (!ok) return;
     socket.emit('teacher:screen-queue:clear', { teacherToken: state.teacherToken });
   });
 
@@ -3338,13 +3373,13 @@
       });
     } else if (action === 'toggle-publish') {
       const nextPub = !(session?.isPublished !== false);
-      if (
-        !nextPub &&
-        !window.confirm(
-          `¿Despublicar la sesión "${session?.name || ''}"?\n\nDejará de estar visible para los alumnos y quienes estén dentro pasarán al selector de sesiones habilitadas.`
-        )
-      ) {
-        return;
+      if (!nextPub) {
+        const ok = await Swal.confirm(
+          '¿Despublicar sesión?',
+          `¿Despublicar la sesión <strong>"${escapeHtml(session?.name || '')}"</strong>?<br><br>Dejará de estar visible para los alumnos y quienes estén dentro pasarán al selector de sesiones habilitadas.`,
+          { icon: 'warning', confirmButtonText: 'Sí, despublicar', confirmButtonColor: '#f59e0b' }
+        );
+        if (!ok) return;
       }
       socket.emit(
         'teacher:session:set-status',
@@ -3356,13 +3391,13 @@
       );
     } else if (action === 'toggle-hide-students') {
       const nextHide = !Boolean(session?.hideFromStudents);
-      if (
-        nextHide &&
-        !window.confirm(
-          `¿Ocultar la sesión "${session?.name || ''}" a todos los alumnos?\n\nDejará de aparecer en la lista de alumnos y ningún alumno podrá entrar. Solo los profesores con Clave Maestra podrán ingresar.`
-        )
-      ) {
-        return;
+      if (nextHide) {
+        const ok = await Swal.confirm(
+          '¿Ocultar sesión a alumnos?',
+          `¿Ocultar la sesión <strong>"${escapeHtml(session?.name || '')}"</strong> a todos los alumnos?<br><br>Dejará de aparecer en la lista de alumnos y ningún alumno podrá entrar. Solo los profesores con Clave Maestra podrán ingresar.`,
+          { icon: 'warning', confirmButtonText: 'Sí, ocultar', confirmButtonColor: '#ef4444' }
+        );
+        if (!ok) return;
       }
       socket.emit(
         'teacher:session:set-status',
@@ -3394,11 +3429,14 @@
         }
       );
     } else if (action === 'delete') {
-      const msg =
+      const ok = await Swal.confirm(
+        '¿Eliminar sesión?',
         state.sessions.length <= 1
-          ? `¿Eliminar la sesión "${session?.name || ''}"? Se borrarán todas sus publicaciones e imágenes y se creará una sesión nueva en blanco.`
-          : `¿Eliminar permanentemente la sesión "${session?.name || ''}" y todas sus publicaciones e imágenes?`;
-      if (!window.confirm(msg)) return;
+          ? `¿Eliminar la sesión <strong>"${escapeHtml(session?.name || '')}"</strong>? Se borrarán todas sus publicaciones e imágenes y se creará una sesión nueva en blanco.`
+          : `¿Eliminar permanentemente la sesión <strong>"${escapeHtml(session?.name || '')}"</strong> y todas sus publicaciones e imágenes?`,
+        { icon: 'warning', confirmButtonText: 'Sí, eliminar', confirmButtonColor: '#ef4444' }
+      );
+      if (!ok) return;
       socket.emit('teacher:session:delete', { teacherToken: state.teacherToken, sessionId }, (ack) => {
         if (!ack?.ok) showToast(ack?.error || 'No se pudo eliminar la sesión', 'error');
         else showToast('Sesión eliminada', 'success');
@@ -3406,9 +3444,11 @@
     }
   });
 
-  el.btnClearSessionPosts.addEventListener('click', () => {
-    const ok = window.confirm(
-      `¿Limpiar TODAS las respuestas (Padlets y Pantallas) de "${state.board.title}"?\n\nSe conservarán los Temas de Tareas y el título de la sesión.`
+  el.btnClearSessionPosts.addEventListener('click', async () => {
+    const ok = await Swal.confirm(
+      '¿Limpiar respuestas de la sesión?',
+      `¿Limpiar TODAS las respuestas (Padlets y Pantallas) de <strong>"${escapeHtml(state.board.title)}"</strong>?<br><br>Se conservarán los Temas de Tareas y el título de la sesión.`,
+      { icon: 'warning', confirmButtonText: 'Sí, limpiar', confirmButtonColor: '#ef4444' }
     );
     if (!ok) return;
     socket.emit('teacher:session:clear-posts', { teacherToken: state.teacherToken }, (ack) => {
@@ -3420,9 +3460,11 @@
     });
   });
 
-  el.btnResetSessionFull.addEventListener('click', () => {
-    const ok = window.confirm(
-      `¿Reiniciar POR COMPLETO la sesión "${state.board.title}"?\n\nSe eliminarán todas las respuestas, imágenes, tareas, avisos y temporizadores de esta sesión.`
+  el.btnResetSessionFull.addEventListener('click', async () => {
+    const ok = await Swal.confirm(
+      '¿Reiniciar POR COMPLETO la sesión?',
+      `¿Reiniciar POR COMPLETO la sesión <strong>"${escapeHtml(state.board.title)}"</strong>?<br><br>Se eliminarán todas las respuestas, imágenes, tareas, avisos y temporizadores de esta sesión.`,
+      { icon: 'warning', confirmButtonText: 'Sí, reiniciar todo', confirmButtonColor: '#ef4444' }
     );
     if (!ok) return;
     socket.emit('teacher:session:reset', { teacherToken: state.teacherToken }, (ack) => {
@@ -3579,18 +3621,32 @@
           }
         );
       } else if (action === 'kick') {
-        if (!window.confirm(`¿Expulsar a "${sName}" de la sesión de clase actual?`)) return;
-        socket.emit(
-          'teacher:student:kick',
-          {
-            teacherToken: state.teacherToken,
-            sessionId: state.activeSessionId,
-            authorId: sId,
-            authorName: sName,
-            reason: 'Expulsado de la clase por el profesor.',
-          },
-          (res) => {
-            if (!res?.ok) {
+        Swal.confirm(
+          '¿Expulsar participante?',
+          `¿Expulsar a <strong>"${escapeHtml(sName)}"</strong> de la sesión de clase actual? Se cerrará su conexión.`,
+          { icon: 'warning', confirmButtonText: 'Sí, expulsar', confirmButtonColor: '#ef4444' }
+        ).then((ok) => {
+          if (!ok) return;
+          socket.emit(
+            'teacher:student:kick',
+            {
+              teacherToken: state.teacherToken,
+              sessionId: state.activeSessionId,
+              authorId: sId,
+              authorName: sName,
+              reason: 'Expulsado de la clase por el profesor.',
+            },
+            (res) => {
+              if (!res?.ok) {
+                showToast(res?.error || 'No se pudo expulsar al alumno', 'error');
+              } else {
+                showToast(`👞 ${sName} ha sido expulsado de la sesión`, 'info');
+                loadTeacherStudents();
+              }
+            }
+          );
+        });
+      }
               showToast(res?.error || 'No se pudo expulsar al alumno', 'error');
             } else {
               showToast(`👢 ${sName} ha sido expulsado de la clase`, 'success');
@@ -4617,6 +4673,11 @@
     const isPausedByTeacher = Boolean(isLive && post.screenShare.pausedByTeacher);
 
     const isScreenCard = isScreenPost(post);
+    const isTeacher = isTeacherPost(post);
+
+    const reEnqueueBtn = isOwner && isScreenCard && !isLive
+      ? `<button type="button" class="action-chip share-btn" data-action="re-enqueue-screen" title="Volver a encolar tu turno para compartir pantalla">🙋 Volver a encolar</button>`
+      : '';
 
     const shareFooterBtn = isPresenter
       ? `<button type="button" class="action-chip stop-share-btn" data-action="stop-screen">■ Detener pantalla</button>`
@@ -4649,6 +4710,10 @@
         }">✓✓ Revisada</span>`
       : '';
 
+    const teacherAuthorBadge = isTeacher
+      ? `<span class="teacher-author-badge" title="Publicación oficial del profesor">👨‍🏫 Profesor</span>`
+      : '';
+
     return {
       headerHtml: `
         <div class="card-author-block">
@@ -4658,6 +4723,7 @@
             <div class="author-name">
               ${escapeHtml(post.author)}
               ${isOwner ? '<span class="you-tag">Tú</span>' : ''}
+              ${teacherAuthorBadge}
             </div>
             <div class="post-time" title="${new Date(post.createdAt).toLocaleString('es-ES')}${post.updatedAt ? ' · editado ' + new Date(post.updatedAt).toLocaleString('es-ES') : ''}">${formatRelativeTime(post.createdAt)}${post.updatedAt ? ' ✏️' : ''}</div>
           </div>
@@ -4672,6 +4738,7 @@
         <div class="card-topic-row">
           <h3 class="card-topic">${escapeHtml(post.topic)}</h3>
           <div class="card-badges-row" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+            ${isScreenCard && isTeacher ? '<span class="teacher-screen-tag">👨‍🏫 Pantalla del Profesor</span>' : ''}
             ${
               post.assignmentTitle
                 ? `<span class="assignment-ref-badge" data-action="filter-assignment-ref" data-assignment-id="${escapeHtml(
@@ -4687,7 +4754,7 @@
         </div>
         ${
           post.imageUrl
-            ? `<div class="card-image-wrap" data-action="open-lightbox" data-img-src="${escapeHtml(post.imageUrl)}" data-img-caption="${escapeHtml(post.topic)} — ${escapeHtml(post.author)}">
+            ? `<div class="card-image-wrap" data-action="open-lightbox" data-img-src="${escapeHtml(post.imageUrl)}" data-img-caption="${escapeHtml(post.topic)} — ${escapeHtml(post.author)}" title="Clic para ver imagen completa en modal">
                  <img src="${escapeHtml(post.imageUrl)}" alt="${escapeHtml(post.topic)}" loading="lazy" />
                </div>`
             : ''
@@ -4725,9 +4792,10 @@
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <span>Elegir / Ver</span>
+            <span>Ver</span>
           </button>
           ${shareFooterBtn}
+          ${reEnqueueBtn}
         </div>
       `,
       commentsHtml: buildCommentsHTML(post),
@@ -4747,6 +4815,9 @@
     if (post.isHidden) article.classList.add('card-hidden');
     if (state.expandedCards.has(post.id)) article.classList.add('card-expanded');
     if (state.focusedCardId === post.id) article.classList.add('card-focused');
+    const isTeacher = isTeacherPost(post);
+    if (isTeacher) article.classList.add('card-teacher');
+    if (isScreenPost(post) && isTeacher) article.classList.add('card-teacher-screen');
 
     const parts = buildCardInnerParts(post);
     article.innerHTML = `
@@ -4966,8 +5037,20 @@
         el.postDetailImage.alt = post.topic || 'Imagen adjunta';
       }
       if (el.btnDownloadPostImage) el.btnDownloadPostImage.classList.remove('hidden');
+      if (el.postDetailImageWrap) {
+        el.postDetailImageWrap.onclick = () => {
+          if (activeDetailPost?.imageUrl) {
+            el.lightboxImg.src = activeDetailPost.imageUrl;
+            el.lightboxCaption.textContent = `${activeDetailPost.topic || ''} — ${activeDetailPost.author || ''}`;
+            openModal(el.lightboxModal);
+          }
+        };
+      }
     } else {
-      if (el.postDetailImageWrap) el.postDetailImageWrap.classList.add('hidden');
+      if (el.postDetailImageWrap) {
+        el.postDetailImageWrap.classList.add('hidden');
+        el.postDetailImageWrap.onclick = null;
+      }
       if (el.postDetailImage) el.postDetailImage.src = '';
       if (el.btnDownloadPostImage) el.btnDownloadPostImage.classList.add('hidden');
     }
@@ -5120,11 +5203,16 @@
     );
   });
 
-  el.btnDetailKick?.addEventListener('click', () => {
+  el.btnDetailKick?.addEventListener('click', async () => {
     if (!activeDetailPost) return;
     const authorId = activeDetailPost.authorId;
     const authorName = activeDetailPost.author;
-    if (!window.confirm(`¿Expulsar a "${authorName}" de la sesión de clase actual?`)) return;
+    const ok = await Swal.confirm(
+      '¿Expulsar participante?',
+      `¿Expulsar a <strong>"${escapeHtml(authorName)}"</strong> de la sesión de clase actual? Se cerrará su conexión.`,
+      { icon: 'warning', confirmButtonText: 'Sí, expulsar', confirmButtonColor: '#ef4444' }
+    );
+    if (!ok) return;
     socket.emit(
       'teacher:student:kick',
       {
@@ -5244,7 +5332,12 @@
     } else if (action === 'kick-author') {
       const aId = actionEl.dataset.authorId;
       const aName = actionEl.dataset.authorName;
-      if (!window.confirm(`¿Expulsar a "${aName}" de la sesión de clase actual?`)) return;
+      const ok = await Swal.confirm(
+        '¿Expulsar participante?',
+        `¿Expulsar a <strong>"${escapeHtml(aName)}"</strong> de la sesión de clase actual? Se cerrará su conexión.`,
+        { icon: 'warning', confirmButtonText: 'Sí, expulsar', confirmButtonColor: '#ef4444' }
+      );
+      if (!ok) return;
       socket.emit(
         'teacher:student:kick',
         {
@@ -5323,12 +5416,35 @@
     } else if (action === 'edit-post') {
       openComposerForEdit(post);
     } else if (action === 'delete-post') {
-      const ok = window.confirm(`¿Eliminar la publicación "${post.topic}"?`);
+      const ok = await Swal.confirm(
+        '¿Eliminar publicación?',
+        `¿Eliminar la publicación <strong>"${escapeHtml(post.topic)}"</strong> de ${escapeHtml(post.author)}?`,
+        { icon: 'warning', confirmButtonText: 'Sí, eliminar', confirmButtonColor: '#ef4444' }
+      );
       if (!ok) return;
       socket.emit('post:delete', { id: postId, authorId, teacherToken: state.teacherToken }, (res) => {
         if (!res?.ok) showToast(res?.error || 'No se pudo eliminar', 'error');
         else showToast('Publicación eliminada');
       });
+    } else if (action === 're-enqueue-screen') {
+      const reason = post.topic || 'Compartir pantalla';
+      socket.emit(
+        'screen-queue:join',
+        {
+          authorId,
+          author: authorName || post.author,
+          reason,
+          audience: post.screenShare?.audience || 'all',
+          targetAuthorIds: post.screenShare?.targetAuthorIds || [],
+        },
+        (ack) => {
+          if (!ack?.ok) {
+            showToast(ack?.error || 'No se pudo agregar a la cola', 'error');
+          } else {
+            showToast('🙋 Te volviste a encolar para compartir pantalla', 'success');
+          }
+        }
+      );
     } else if (action === 'open-lightbox') {
       el.lightboxImg.src = actionEl.dataset.imgSrc || '';
       el.lightboxCaption.textContent = actionEl.dataset.imgCaption || '';
@@ -7079,8 +7195,13 @@
     );
   });
 
-  el.btnClearChat?.addEventListener('click', () => {
-    if (!confirm('¿Deseas limpiar todos los mensajes del chat de esta sesión?')) return;
+  el.btnClearChat?.addEventListener('click', async () => {
+    const ok = await Swal.confirm(
+      '¿Limpiar chat de la sesión?',
+      '¿Deseas limpiar todos los mensajes del chat de esta sesión para todos los usuarios?',
+      { icon: 'warning', confirmButtonText: 'Sí, limpiar chat', confirmButtonColor: '#ef4444' }
+    );
+    if (!ok) return;
     socket.emit('chat:clear', { teacherToken: state.teacherToken, sessionId: state.activeSessionId }, (ack) => {
       if (!ack?.ok) showToast(ack?.error || 'No se pudo limpiar el chat', 'error');
       else showToast('Chat de la sesión limpiado');
