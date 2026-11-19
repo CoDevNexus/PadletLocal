@@ -1252,6 +1252,7 @@ class BoardStore {
       currentQuestionIndex: 0,
       questionStartedAt: now,
       questionEndsAt: now + firstQ.timeLimitSec * 1000,
+      showStatsToStudents: false,
     };
 
     this.save();
@@ -1319,6 +1320,15 @@ class BoardStore {
       this.save();
     }
     return active;
+  }
+
+  toggleQuizShareStats(sessionId = null) {
+    const session = this.resolveSession(sessionId);
+    const active = session.activeQuiz;
+    if (!active) return false;
+    active.showStatsToStudents = !active.showStatsToStudents;
+    this.save();
+    return Boolean(active.showStatsToStudents);
   }
 
   nextQuizStep(sessionId = null) {
@@ -1544,6 +1554,7 @@ class BoardStore {
       questionEndsAt: active.questionEndsAt,
       responseCount: qRespList.length,
       answeredAuthorIds: Object.keys(qRespMap),
+      showStatsToStudents: Boolean(active.showStatsToStudents),
     };
 
     if (q && (active.status === 'question' || active.status === 'reveal')) {

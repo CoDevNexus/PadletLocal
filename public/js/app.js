@@ -349,6 +349,9 @@
     topTeacherNameDisplay: document.getElementById('topTeacherNameDisplay'),
     btnStudentMenu: document.getElementById('btnStudentMenu'),
     btnTeacherMenu: document.getElementById('btnTeacherMenu'),
+    topbarClockWidget: document.getElementById('topbarClockWidget'),
+    topbarClockDigits: document.getElementById('topbarClockDigits'),
+    topbarSessionDuration: document.getElementById('topbarSessionDuration'),
     menuBackdropOverlay: document.getElementById('menuBackdropOverlay'),
     studentActionMenu: document.getElementById('studentActionMenu'),
     teacherActionMenu: document.getElementById('teacherActionMenu'),
@@ -2828,7 +2831,12 @@
       resetAssignmentFormToNew();
     }
 
+    const prevSessionId = state.activeSessionId;
     state.activeSessionId = data.sessionId !== undefined ? data.sessionId : data.activeSessionId || null;
+    if (isSessionChange || (state.activeSessionId && state.activeSessionId !== prevSessionId)) {
+      syncSessionStartTime(state.activeSessionId);
+      updateTopbarClockAndSessionTimer();
+    }
     state.sessionStatus = data.sessionStatus || { isPublished: true, isClosed: false };
     if (Array.isArray(data.sessions)) {
       state.sessions = data.sessions;
@@ -4896,11 +4904,69 @@
     });
   }
 
+  // --- Topbar Live Clock and Elapsed Session Timer ---
+  const STORAGE_SESSION_START_TIME = 'padletlocal_session_start_time';
+  const STORAGE_SESSION_START_ID = 'padletlocal_session_start_id';
+  let sessionStartTime = Number(sessionStorage.getItem(STORAGE_SESSION_START_TIME)) || Date.now();
+
+  function syncSessionStartTime(sessionId) {
+    const sessionKey = sessionId || '__DEFAULT__';
+    const storedSessionId = sessionStorage.getItem(STORAGE_SESSION_START_ID);
+    const storedTime = Number(sessionStorage.getItem(STORAGE_SESSION_START_TIME));
+    if (storedSessionId === sessionKey && storedTime && !isNaN(storedTime)) {
+      sessionStartTime = storedTime;
+    } else {
+      sessionStartTime = Date.now();
+      sessionStorage.setItem(STORAGE_SESSION_START_ID, sessionKey);
+      sessionStorage.setItem(STORAGE_SESSION_START_TIME, String(sessionStartTime));
+    }
+  }
+
+  function updateTopbarClockAndSessionTimer() {
+    if (!el.topbarClockDigits || !el.topbarSessionDuration) return;
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const h = pad(now.getHours());
+    const m = pad(now.getMinutes());
+    const s = pad(now.getSeconds());
+
+    el.topbarClockDigits.innerHTML = `<span class="clock-hm">${h}:${m}</span><span class="clock-sec">:${s}</span>`;
+
+    const elapsedSec = Math.max(0, Math.floor((Date.now() - sessionStartTime) / 1000));
+    const hrs = Math.floor(elapsedSec / 3600);
+    const mins = Math.floor((elapsedSec % 3600) / 60);
+    const secs = elapsedSec % 60;
+
+    let sessionStr = '';
+    if (hrs > 0) {
+      sessionStr = `${hrs}h ${mins}m`;
+    } else if (mins > 0) {
+      sessionStr = `${mins}m ${secs}s`;
+    } else {
+      sessionStr = `${secs}s`;
+    }
+
+    el.topbarSessionDuration.textContent = sessionStr;
+
+    if (el.topbarClockWidget) {
+      el.topbarClockWidget.title = `Hora local: ${h}:${m}:${s} · Tiempo en sesión: ${
+        hrs > 0 ? `${hrs}h ` : ''
+      }${mins > 0 ? `${mins}m ` : ''}${secs}s`;
+    }
+  }
+
+  function initTopbarClockAndSessionTimer() {
+    syncSessionStartTime(state.activeSessionId);
+    updateTopbarClockAndSessionTimer();
+    setInterval(updateTopbarClockAndSessionTimer, 1000);
+  }
+
   applyUiMode(state.uiMode);
   applyWorkspaceView(state.workspaceView);
   updateBoardDensity();
   updateScreensDensity();
   initRichEditorToolbars();
+  initTopbarClockAndSessionTimer();
 
   // --- Header & Toolbar Listeners ---
   el.btnNewPost?.addEventListener('click', () => openComposerForCreate());

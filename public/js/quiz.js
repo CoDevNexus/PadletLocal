@@ -725,12 +725,18 @@
       qEl.liveQuizBannerMeta.textContent = `Pregunta ${aq.currentQuestionIndex + 1} de ${aq.totalQuestions} · ${aq.responseCount} resp.`;
       qEl.liveQuizBannerCountdown.textContent = `⏱ ${rem}s`;
     } else if (aq.status === 'reveal') {
+      const canSeeStats = state.isTeacher || aq.showStatsToStudents;
       const pct = aq.reveal?.comprehensionPercent ?? 0;
-      qEl.liveQuizBannerMeta.textContent = `Resultado Pregunta ${aq.currentQuestionIndex + 1}/${aq.totalQuestions} · ${pct}% entendimiento`;
+      qEl.liveQuizBannerMeta.textContent = canSeeStats
+        ? `Resultado Pregunta ${aq.currentQuestionIndex + 1}/${aq.totalQuestions} · ${pct}% entendimiento`
+        : `Resultado Pregunta ${aq.currentQuestionIndex + 1}/${aq.totalQuestions} · Respuesta lista`;
       qEl.liveQuizBannerCountdown.textContent = '✓ Revelada';
     } else {
+      const canSeeStats = state.isTeacher || aq.showStatsToStudents;
       const pct = aq.analytics?.overallPercent ?? 0;
-      qEl.liveQuizBannerMeta.textContent = `Análisis final · ${pct}% entendimiento grupal`;
+      qEl.liveQuizBannerMeta.textContent = canSeeStats
+        ? `Análisis final · ${pct}% entendimiento grupal`
+        : `Test finalizado · Ver resultado`;
       qEl.liveQuizBannerCountdown.textContent = '📊 Finalizado';
     }
 
@@ -808,34 +814,51 @@
           : `<div class="info-callout">⏱ No se registró respuesta tuya en esta pregunta.</div>`
         : '';
 
+      const canSeeStats = state.isTeacher || aq.showStatsToStudents;
+      const pctPill = canSeeStats
+        ? `<span class="quiz-pct-pill ${getLevelClass(rev.comprehensionPercent, rev.totalResponses > 0)}">${rev.comprehensionPercent}% entendimiento (${rev.correctCount}/${rev.totalResponses})</span>`
+        : `<span class="quiz-pct-pill" style="background:#f1f5f9; color:#64748b; font-weight:600;">🔒 Estadísticas en panel del profesor</span>`;
+
       const barsHtml = q.options
         .map((opt, idx) => {
           const isCorrect = idx === rev.correctIndex;
           const isMine = myAns && myAns.optionIndex === idx;
           const pct = rev.optionPercents[idx] || 0;
           const cnt = rev.optionCounts[idx] || 0;
+          const statsLabel = canSeeStats
+            ? `<span><strong>${pct}%</strong> (${cnt})</span>`
+            : '';
+          const barTrack = canSeeStats
+            ? `<div class="quiz-bar-track"><div class="quiz-bar-fill" style="width:${pct}%"></div></div>`
+            : '';
+
           return `
             <div class="quiz-stat-opt ${isCorrect ? 'is-correct' : ''} ${isMine && !isCorrect ? 'is-wrong-mine' : ''}">
               <div class="quiz-stat-opt-top">
                 <span><strong>${OPTION_LETTERS[idx] || idx + 1}.</strong> ${escapeHtml(opt)} ${
             isCorrect ? '✓ Correcta' : ''
           } ${isMine ? '(Tu respuesta)' : ''}</span>
-                <span><strong>${pct}%</strong> (${cnt})</span>
+                ${statsLabel}
               </div>
-              <div class="quiz-bar-track"><div class="quiz-bar-fill" style="width:${pct}%"></div></div>
+              ${barTrack}
             </div>
           `;
         })
         .join('');
 
+      const statsNotice = !canSeeStats
+        ? `<div class="info-callout" style="margin-top:10px;">🔒 Las estadísticas de respuestas de la clase solo son visibles para el profesor.</div>`
+        : '';
+
       qEl.liveQuizBody.innerHTML = `
         <div class="quiz-live-topbar">
           <span class="quiz-q-counter">Resultado · Pregunta ${aq.currentQuestionIndex + 1} de ${aq.totalQuestions}</span>
-          <span class="quiz-pct-pill ${getLevelClass(rev.comprehensionPercent, rev.totalResponses > 0)}">${rev.comprehensionPercent}% entendimiento (${rev.correctCount}/${rev.totalResponses})</span>
+          ${pctPill}
         </div>
         <h3 class="quiz-question-heading">${escapeHtml(q.text)}</h3>
         ${feedbackBanner}
         <div class="quiz-stat-opts-grid">${barsHtml}</div>
+        ${statsNotice}
       `;
     } else if (aq.status === 'summary' && aq.analytics) {
       qState.lastAnalytics = aq.analytics;
@@ -844,22 +867,46 @@
         !state.isTeacher && myStudent
           ? `<div class="quiz-strong-box">🎯 Tu resultado: <strong>${myStudent.correctCount} de ${myStudent.totalQuestions} correctas (${myStudent.percent}%)</strong></div>`
           : '';
-      qEl.liveQuizBody.innerHTML =
-        myScoreBanner + buildAnalyticsHTML(aq.analytics, { showStudents: state.isTeacher });
+
+      const canSeeStats = state.isTeacher || aq.showStatsToStudents;
+
+      if (canSeeStats) {
+        qEl.liveQuizBody.innerHTML =
+          myScoreBanner + buildAnalyticsHTML(aq.analytics, { showStudents: state.isTeacher });
+      } else {
+        qEl.liveQuizBody.innerHTML = `
+          ${myScoreBanner}
+          <div class="info-callout" style="margin-top:16px; text-align:center; padding: 22px;">
+            <div style="font-size:2.2rem; margin-bottom:8px;">🔒</div>
+            <strong style="font-size:1.05rem;">Estadísticas del test reservadas para el profesor</strong>
+            <p class="muted-note" style="margin-top:6px; line-height:1.5;">El profesor está revisando los resultados generales del grupo. Si decide compartirlos con la clase, aparecerán aquí automáticamente.</p>
+          </div>
+        `;
+      }
     }
 
     // Teacher live controls footer
     if (state.isTeacher) {
       qEl.liveQuizFooter.classList.remove('hidden');
       const isLastQuestion = aq.currentQuestionIndex >= aq.totalQuestions - 1;
+      const shareBtn = `
+        <button type="button" class="btn btn-sm ${aq.showStatsToStudents ? 'btn-live' : 'btn-secondary'}" data-live-quiz-action="toggle-share-stats" title="${
+          aq.showStatsToStudents ? 'Ocultar estadísticas a los alumnos' : 'Compartir estadísticas y porcentajes con los alumnos'
+        }">
+          ${aq.showStatsToStudents ? '🔒 Ocultar estadísticas a alumnos' : '👁️ Compartir estadísticas con alumnos'}
+        </button>
+      `;
+
       if (aq.status === 'question') {
         qEl.liveQuizFooter.innerHTML = `
           <button type="button" class="btn btn-sm btn-live" data-live-quiz-action="close">⏹ Cancelar test</button>
+          ${shareBtn}
           <button type="button" class="btn btn-sm btn-primary" data-live-quiz-action="reveal">👁 Revelar respuesta ahora</button>
         `;
       } else if (aq.status === 'reveal') {
         qEl.liveQuizFooter.innerHTML = `
           <button type="button" class="btn btn-sm btn-live" data-live-quiz-action="close">⏹ Cerrar test</button>
+          ${shareBtn}
           <button type="button" class="btn btn-sm btn-primary" data-live-quiz-action="next">${
             isLastQuestion ? '📊 Ver análisis final' : '➡ Siguiente pregunta'
           }</button>
@@ -867,6 +914,7 @@
       } else {
         qEl.liveQuizFooter.innerHTML = `
           <button type="button" class="btn btn-sm btn-secondary" data-live-quiz-action="copy-summary">📋 Copiar resumen</button>
+          ${shareBtn}
           <button type="button" class="btn btn-sm btn-primary" data-live-quiz-action="close">✓ Finalizar y cerrar test</button>
         `;
       }
@@ -934,6 +982,19 @@
       socket.emit('teacher:quiz:reveal', { teacherToken: state.teacherToken });
     } else if (action === 'next') {
       socket.emit('teacher:quiz:next', { teacherToken: state.teacherToken });
+    } else if (action === 'toggle-share-stats') {
+      socket.emit('teacher:quiz:toggle-share-stats', { teacherToken: state.teacherToken }, (ack) => {
+        if (!ack?.ok) {
+          showToast(ack?.error || 'No se pudo cambiar la visibilidad de estadísticas', 'error');
+        } else {
+          showToast(
+            ack.showStatsToStudents
+              ? '👁️ Estadísticas compartidas con los alumnos'
+              : '🔒 Estadísticas ocultas para los alumnos',
+            'info'
+          );
+        }
+      });
     } else if (action === 'close') {
       socket.emit('teacher:quiz:close', { teacherToken: state.teacherToken }, (ack) => {
         if (ack?.ok) {

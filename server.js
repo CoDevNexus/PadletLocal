@@ -1435,6 +1435,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('teacher:quiz:toggle-share-stats', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket);
+      const showStats = store.toggleQuizShareStats(session.id);
+      broadcastQuizState(session.id);
+      if (typeof ack === 'function') ack({ ok: true, showStatsToStudents: showStats });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
   socket.on('teacher:quiz:next', (payload, ack) => {
     try {
       requireTeacher(payload?.teacherToken);
