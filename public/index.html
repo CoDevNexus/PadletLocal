@@ -64,19 +64,26 @@
               <span class="event-badge-label">Evento:</span>
               <span id="eventNameDisplay" class="event-name-text">Sesión Principal</span>
             </span>
+            <span class="meta-dot">·</span>
+            <button id="activeSessionBadge" class="session-badge hidden" title="Sesión de clase activa · Clic para ver o cambiar de sesión">
+              <span class="session-badge-icon">📚</span>
+              <span class="session-badge-label">Sesión:</span>
+              <span id="activeSessionNameText" class="session-name-text">Principal</span>
+            </button>
+            <button id="btnEditBoard" class="icon-btn-subtle teacher-only btn-edit-board-top" title="Editar institución y evento (Solo Docente)" aria-label="Editar institución y evento">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              <span class="btn-text-xs">Editar</span>
+            </button>
           </div>
 
           <div class="brand-title-row">
             <h1 id="boardTitle">PadletLocal</h1>
-            <button id="activeSessionBadge" class="session-badge hidden" title="Sesión de clase activa">📚 Sesión</button>
-            <button id="btnEditBoard" class="icon-btn-subtle" title="Editar institución, evento y título del panel" aria-label="Editar institución, evento y título del panel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-              </svg>
-            </button>
+            <span class="brand-divider-dot">·</span>
+            <p id="boardDescription" class="brand-subtitle">Panel colaborativo en red local — ideas, imágenes y pantalla compartida en tiempo real.</p>
           </div>
-          <p id="boardDescription" class="brand-subtitle">Panel colaborativo en red local — ideas, imágenes y pantalla compartida en tiempo real.</p>
         </div>
       </div>
 
@@ -439,6 +446,13 @@
             <span class="action-menu-item-desc">Crear, cerrar o despublicar clases</span>
           </div>
         </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherEditBoard">
+          <span class="action-menu-item-icon">🏫</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Institución y Evento</span>
+            <span class="action-menu-item-desc">Cambiar institución, logo y nombre del evento</span>
+          </div>
+        </button>
         <button type="button" class="action-menu-item" id="menuItemTeacherStudents">
           <span class="action-menu-item-icon">👥</span>
           <div class="action-menu-item-content">
@@ -727,6 +741,10 @@
                 <path d="m21 21-4.3-4.3" />
               </svg>
               <input id="screenSearchInput" type="search" placeholder="Buscar pantallas por autor o motivo..." autocomplete="off" />
+            </div>
+            <div class="screens-scroll-nav" role="group" aria-label="Desplazar pantallas horizontalmente">
+              <button type="button" id="btnScrollScreensLeft" class="btn btn-sm btn-secondary icon-btn-scroll" title="Desplazar pantallas a la izquierda">◀</button>
+              <button type="button" id="btnScrollScreensRight" class="btn btn-sm btn-secondary icon-btn-scroll" title="Desplazar pantallas a la derecha">▶</button>
             </div>
             <div class="density-control" id="screensDensityControl" role="group" title="Tamaño de las pantallas">
               <button type="button" class="density-btn active" data-screen-size="compact" title="Pantallas pequeñas">Pequeño</button>

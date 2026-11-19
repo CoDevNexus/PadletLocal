@@ -65,21 +65,22 @@ textarea {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 40;
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
 }
 
 .topbar-inner {
-  max-width: 1520px;
+  max-width: 1540px;
   margin: 0 auto;
-  padding: 12px 24px;
+  padding: 10px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
@@ -131,9 +132,10 @@ textarea {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
   font-size: 0.74rem;
   line-height: 1.2;
+  flex-wrap: wrap;
 }
 
 .institution-badge {
@@ -144,12 +146,77 @@ textarea {
   color: #1e40af;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
-  padding: 1px 7px;
+  padding: 1.5px 8px;
   border-radius: 999px;
-  max-width: 200px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  color: #7c2d12;
+  background: #ffedd5;
+  border: 1px solid #fed7aa;
+  padding: 1.5px 8px;
+  border-radius: 999px;
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.session-badge:hover {
+  background: #fed7aa;
+  border-color: #fdba74;
+  color: #9a3412;
+  transform: translateY(-1px);
+}
+
+.session-badge-label {
+  color: #ea580c;
+  font-size: 0.69rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.session-badge-name {
+  font-weight: 700;
+  color: #7c2d12;
+}
+
+.session-badge-count {
+  font-size: 0.69rem;
+  color: #c2410c;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.btn-edit-board-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1.5px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #4338ca;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-edit-board-top:hover {
+  background: #e0e7ff;
+  color: #3730a3;
+  border-color: #a5b4fc;
 }
 
 .event-badge-pill {
@@ -296,58 +363,66 @@ textarea {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.22);
 }
 
-/* --- Live Clock & Session Duration Widget --- */
+/* --- Live Clock & Session Duration Widget (Grande Arriba a la Derecha) --- */
 .topbar-clock-widget {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #1e293b;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  gap: 10px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1.5px solid #cbd5e1;
+  color: #0f172a;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
   user-select: none;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
   margin-left: auto;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.topbar-clock-widget:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.09);
 }
 
 .topbar-clock-main {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: #0f172a;
+  gap: 6px;
 }
 
 .topbar-clock-icon {
-  color: #64748b;
+  color: #4f46e5;
   flex-shrink: 0;
 }
 
 .clock-digits {
   display: inline-flex;
   align-items: baseline;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  line-height: 1;
 }
 
 .clock-hm {
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .clock-sec {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #64748b;
-  margin-left: 1px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #6366f1;
+  margin-left: 2px;
 }
 
 .topbar-clock-divider {
   color: #cbd5e1;
   font-weight: 700;
-  font-size: 0.75rem;
+  font-size: 1rem;
   line-height: 1;
 }
 
@@ -355,12 +430,14 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #475569;
-  background: rgba(100, 116, 139, 0.09);
-  padding: 2px 7px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #3730a3;
+  background: #e0e7ff;
+  border: 1px solid #c7d2fe;
+  padding: 3px 8px;
   border-radius: 999px;
+  line-height: 1.2;
 }
 
 .session-timer-icon {
@@ -636,11 +713,31 @@ textarea {
   font-weight: 700;
 }
 
-/* --- Board Grid --- */
+/* --- Board Grid & Scrollable Publications Canvas --- */
 .board-container {
-  max-width: 1520px;
+  max-width: 1540px;
   margin: 0 auto;
   padding: 16px 24px 100px;
+  max-height: calc(100vh - 210px);
+  min-height: 340px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+.board-container::-webkit-scrollbar {
+  width: 8px;
+}
+.board-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+}
+.board-container::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.4);
+  border-radius: 999px;
+}
+.board-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.75);
 }
 
 .board-grid {
@@ -3895,9 +3992,25 @@ body.mode-easy .form-group textarea {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px;
+  max-height: 400px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+.queue-list::-webkit-scrollbar {
+  width: 6px;
+}
+.queue-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 999px;
+}
+.queue-list::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.45);
+  border-radius: 999px;
+}
+.queue-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.8);
 }
 
 .queue-empty {
@@ -4019,6 +4132,20 @@ body.mode-easy .form-group textarea {
   font-size: 1rem;
 }
 
+.screens-scroll-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-btn-scroll {
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 8px;
+  line-height: 1;
+}
+
 .screens-grid {
   display: flex !important;
   flex-direction: row;
@@ -4026,24 +4153,24 @@ body.mode-easy .form-group textarea {
   gap: 16px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 4px 16px;
+  padding: 6px 4px 18px;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
 
 .screens-grid::-webkit-scrollbar {
-  height: 8px;
+  height: 9px;
 }
 .screens-grid::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.05);
   border-radius: 999px;
 }
 .screens-grid::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.45);
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
   border-radius: 999px;
 }
 .screens-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.75);
+  background: linear-gradient(90deg, #4f46e5, #7c3aed);
 }
 
 .screens-grid .card {
@@ -5752,12 +5879,20 @@ body.role-teacher .student-only {
   .topbar-clock-main {
     font-size: 0.76rem;
   }
+  .clock-digits {
+    font-size: 0.94rem;
+    font-weight: 700;
+  }
   .clock-sec {
-    font-size: 0.65rem;
+    font-size: 0.68rem;
   }
   .topbar-session-duration {
     font-size: 0.68rem;
     padding: 1px 5px;
+  }
+  .board-container {
+    padding: 12px 14px 70px;
+    max-height: calc(100vh - 180px);
   }
 
   /* Bottom sheet drawer for action menus on mobile */

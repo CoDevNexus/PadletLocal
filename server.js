@@ -826,6 +826,8 @@ app.post('/api/upload', (req, res) => {
 
 app.patch('/api/board', (req, res) => {
   try {
+    const token = req.headers['x-teacher-token'] || req.body?.teacherToken;
+    requireTeacher(token);
     const sid = req.body?.sessionId || store.getActiveSessionId();
     const updated = store.updateBoard(
       {
@@ -841,7 +843,7 @@ app.patch('/api/board', (req, res) => {
     broadcastSessionsSummaryToAll();
     res.json(updated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(403).json({ error: err.message });
   }
 });
 

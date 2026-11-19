@@ -708,6 +708,10 @@
     institutionLogoDefault: document.getElementById('institutionLogoDefault'),
     institutionNameDisplay: document.getElementById('institutionNameDisplay'),
     eventNameDisplay: document.getElementById('eventNameDisplay'),
+    activeSessionNameText: document.getElementById('activeSessionNameText'),
+    btnScrollScreensLeft: document.getElementById('btnScrollScreensLeft'),
+    btnScrollScreensRight: document.getElementById('btnScrollScreensRight'),
+    menuItemTeacherEditBoard: document.getElementById('menuItemTeacherEditBoard'),
 
     // Quick name modal
     nameModal: document.getElementById('nameModal'),
@@ -3126,10 +3130,16 @@
     el.sessionsCountNum.textContent = String(sessions.length);
 
     // Show session switcher pill in header for everyone so users/teachers can choose/switch sessions anytime
+    const currentSession = sessions.find((s) => s.id === state.activeSessionId) || sessions[0];
+    const currentSessionName = currentSession ? currentSession.name : 'Principal';
     el.activeSessionBadge.classList.remove('hidden');
-    el.activeSessionBadge.textContent =
-      sessions.length > 1 ? `📚 Cambiar sesión (${sessions.length})` : '📚 Sesiones';
-    el.activeSessionBadge.title = 'Elegir o cambiar de sesión de clase';
+    el.activeSessionBadge.innerHTML = `
+      <span class="session-badge-icon">📚</span>
+      <span class="session-badge-label">Sesión:</span>
+      <strong class="session-name-text">${escapeHtml(currentSessionName)}</strong>
+      ${sessions.length > 1 ? `<span class="session-badge-count">(${sessions.length})</span>` : ''}
+    `;
+    el.activeSessionBadge.title = `Sesión actual: ${currentSessionName}. Clic para ver o cambiar entre ${sessions.length} sesiones`;
 
     if (sessions.length === 0) {
       el.sessionsList.innerHTML = '<div class="muted-note">Sin sesiones registradas.</div>';
@@ -6339,7 +6349,11 @@
     renderBoardFull();
   });
 
-  el.btnEditBoard.addEventListener('click', () => {
+  function openBoardEditModalForTeacher() {
+    if (!state.isTeacher) {
+      showToast('Acceso restringido. Solo el profesor puede editar la institución y el evento.', 'error');
+      return;
+    }
     if (el.inputBoardInstitution) {
       el.inputBoardInstitution.value = (state.board.institutionName || 'Institución Educativa').replace(/^🏫\s*/, '');
     }
@@ -6350,10 +6364,25 @@
     el.inputBoardDesc.value = state.board.description || '';
     openModal(el.boardEditModal);
     if (el.inputBoardTitle) el.inputBoardTitle.focus();
+  }
+
+  el.btnEditBoard.addEventListener('click', () => {
+    openBoardEditModalForTeacher();
   });
+
+  if (el.menuItemTeacherEditBoard) {
+    el.menuItemTeacherEditBoard.addEventListener('click', () => {
+      closeAllRoleMenus();
+      openBoardEditModalForTeacher();
+    });
+  }
 
   el.boardEditForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!state.isTeacher) {
+      showToast('Acceso restringido. Solo el profesor puede guardar cambios de la institución y evento.', 'error');
+      return;
+    }
     const title = el.inputBoardTitle.value.trim();
     const eventName = title;
     const institutionName = el.inputBoardInstitution ? el.inputBoardInstitution.value.trim() : '';
@@ -6363,9 +6392,13 @@
     try {
       const res = await fetch('/api/board', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-teacher-token': state.teacherToken || '',
+        },
         body: JSON.stringify({
           sessionId: state.activeSessionId,
+          teacherToken: state.teacherToken || '',
           title,
           eventName,
           institutionName,
@@ -6373,13 +6406,28 @@
           description,
         }),
       });
-      if (!res.ok) throw new Error('Error al guardar');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Error al guardar');
+      }
       closeModal(el.boardEditModal);
-      showToast('Institución y evento actualizados', 'success');
-    } catch {
-      showToast('No se pudo actualizar el panel', 'error');
+      showToast('Institución y evento actualizados correctamente', 'success');
+    } catch (err) {
+      showToast(err.message || 'No se pudo actualizar el panel', 'error');
     }
   });
+
+  // Screen horizontal scroll navigation buttons
+  if (el.btnScrollScreensLeft && el.screensGrid) {
+    el.btnScrollScreensLeft.addEventListener('click', () => {
+      el.screensGrid.scrollBy({ left: -340, behavior: 'smooth' });
+    });
+  }
+  if (el.btnScrollScreensRight && el.screensGrid) {
+    el.btnScrollScreensRight.addEventListener('click', () => {
+      el.screensGrid.scrollBy({ left: 340, behavior: 'smooth' });
+    });
+  }
 
   el.btnUserChip.addEventListener('click', () => {
     el.inputQuickName.value = authorName;
