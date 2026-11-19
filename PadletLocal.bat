@@ -71,73 +71,74 @@ call :GET_LAN_IP
 
 cls
 echo ==============================================================
-echo                PADLETLOCAL - PANEL DE CONTROL
-echo        Desarrollado por CoDevNexus - www.codevnexus.tech
-echo     100%% Local LAN - Privacidad y Soberania de tus Datos
+echo               PADLETLOCAL ⚡ PANEL DEL DOCENTE
+echo        Desarrollado por CoDevNexus · www.codevnexus.tech
+echo         100%% Local LAN · Privacidad y Soberania de Datos
 echo ==============================================================
 echo.
 if "%SERVER_RUNNING%"=="1" (
-    echo   Estado         : [ ACTIVO ]  PID: !SERVER_PID!
-    echo   HTTPS WebRTC   : https://!LAN_IP!:!HTTPS_PORT!
-    echo   HTTP Rapido    : http://!LAN_IP!:!PORT!
-    echo   Local          : https://localhost:!HTTPS_PORT!
+    echo   ESTADO:           🟢 ACTIVO (Pizarra lista para la clase)
+    echo   ENLACE ALUMNOS:   https://!LAN_IP!:!HTTPS_PORT!
+    echo   CLAVE DOCENTE:    !TEACHER_PIN!
+    if "%CERT_TRUSTED%"=="1" (
+        echo   SEGURIDAD:        ✅ Candado seguro instalado (sin pantalla roja)
+    ) else (
+        echo   SEGURIDAD:        ⚠️ Pantalla roja posible (usa opcion [5] para quitarla)
+    )
 ) else (
-    echo   Estado         : [ DETENIDO ]
-    echo   IP Local       : !LAN_IP!
-    echo   Puertos        : HTTP !PORT!  ^|  HTTPS !HTTPS_PORT!
+    echo   ESTADO:           🔴 DETENIDO (Listo para iniciar tu clase)
+    echo   TU IP LOCAL:      !LAN_IP!
+    echo   CLAVE DOCENTE:    !TEACHER_PIN!
+    echo   CONSEJO:          Elige la opcion [1] para iniciar todo en 1 clic.
 )
-echo   PIN Profesor   : !TEACHER_PIN!
-if "%CERT_TRUSTED%"=="1" (
-    echo   Certificado CA : [ CONFIADO EN ESTE EQUIPO - sin pantalla roja ]
-) else (
-    echo   Certificado CA : [ CREADO - usa opcion 8 para confiar en este PC ]
-)
-echo   Cert. alumnos  : http://!LAN_IP!:!PORT!/cert/Instalar-Certificado-Windows.bat
 echo.
 echo ==============================================================
-echo   [1] Iniciar servidor ^(crea certificados antes de arrancar^)
-echo   [2] Detener servidor
-echo   [3] Reiniciar servidor
-echo   [4] Abrir PadletLocal en el navegador ^(HTTPS^)
-echo   [5] Cambiar PIN del Profesor / Puertos
-echo   [6] Ver registro ^(log^) del servidor
-echo   [7] Permitir puertos en Firewall de Windows ^(Admin^)
-echo   [8] Instalar certificado CA en este PC ^(quitar pantalla roja^)
-echo   [9] Buscar y aplicar actualizaciones ^(Git / Backup Seguro^)
-echo   [R] Actualizar estado
-echo   [0] Salir del panel
+echo   🚀 ACCIONES PRINCIPALES PARA TU CLASE:
+echo.
+echo   [1] ▶ INICIAR CLASE (Arranca el servidor y abre el navegador) ⭐
+echo   [2] 🌐 Abrir pizarra en el navegador (si ya esta iniciado)
+echo   [3] ⏹ Detener servidor (Terminar la clase)
+echo   [4] 📋 Ver enlace y datos para conectar a los alumnos
+echo.
+echo   🛠️ HERRAMIENTAS Y CONFIGURACION:
+echo.
+echo   [5] 🛡️ Quitar advertencia/pantalla roja en este PC (Instalar certificado)
+echo   [6] 🔑 Cambiar Clave / PIN del Profesor (Actual: !TEACHER_PIN!)
+echo   [7] 📶 Permitir conexion en Firewall de Windows (si alumnos no entran)
+echo   [8] 🔄 Buscar actualizaciones (con Respaldo Seguro automatico)
+echo   [9] ⚙️ Opciones avanzadas (Reiniciar servidor, ver logs, cambiar puertos)
+echo   [R] 🔃 Refrescar estado
+echo   [0] 🚪 Salir
 echo ==============================================================
 echo.
 set "OPT="
-set /p "OPT=Selecciona una opcion: "
+set /p "OPT=Elige una opcion [1]: "
+if "%OPT%"=="" set "OPT=1"
 
 if /i "%OPT%"=="1" (
-    call :START_SERVER interactive
-    pause
+    call :START_AND_OPEN_CLASS
     goto :MENU
 )
 if /i "%OPT%"=="2" (
-    call :STOP_SERVER
-    pause
+    call :OPEN_BROWSER
     goto :MENU
 )
 if /i "%OPT%"=="3" (
     call :STOP_SERVER
-    powershell -NoProfile -Command "Start-Sleep -Seconds 1"
-    call :START_SERVER interactive
     pause
     goto :MENU
 )
 if /i "%OPT%"=="4" (
-    call :OPEN_BROWSER
+    call :SHOW_STUDENT_INFO
     goto :MENU
 )
 if /i "%OPT%"=="5" (
-    call :EDIT_CONFIG
+    call :TRUST_CERT_LOCAL
+    pause
     goto :MENU
 )
 if /i "%OPT%"=="6" (
-    call :VIEW_LOGS
+    call :EDIT_CONFIG
     goto :MENU
 )
 if /i "%OPT%"=="7" (
@@ -145,12 +146,11 @@ if /i "%OPT%"=="7" (
     goto :MENU
 )
 if /i "%OPT%"=="8" (
-    call :TRUST_CERT_LOCAL
-    pause
+    call :APPLY_UPDATES
     goto :MENU
 )
 if /i "%OPT%"=="9" (
-    call :APPLY_UPDATES
+    call :ADVANCED_MENU
     goto :MENU
 )
 if /i "%OPT%"=="R" goto :MENU
@@ -361,6 +361,85 @@ if "%SERVER_RUNNING%"=="0" (
     echo [OK] Servidor detenido correctamente.
 ) else (
     echo [ERROR] No se pudo detener el proceso !SERVER_PID!.
+)
+exit /b 0
+
+:START_AND_OPEN_CLASS
+call :CHECK_STATUS
+if "%SERVER_RUNNING%"=="0" (
+    call :START_SERVER interactive
+    powershell -NoProfile -Command "Start-Sleep -Seconds 1"
+)
+call :CHECK_STATUS
+if "%SERVER_RUNNING%"=="1" (
+    call :OPEN_BROWSER
+) else (
+    pause
+)
+exit /b 0
+
+:SHOW_STUDENT_INFO
+cls
+call :CHECK_STATUS
+call :GET_LAN_IP
+echo ==============================================================
+echo        DATOS DE CONEXION PARA LOS ALUMNOS Y PARTICIPANTES
+echo ==============================================================
+echo.
+echo   1. Los alumnos deben estar conectados a la MISMA RED WI-FI
+echo      o cable local que esta computadora.
+echo.
+echo   2. Comparte o proyecta este enlace en el salon de clases:
+echo.
+echo      ENLACE ALUMNOS:   https://!LAN_IP!:!HTTPS_PORT!
+echo.
+echo   3. Clave Maestra del Docente:  !TEACHER_PIN!
+echo      (Los alumnos NO necesitan clave para ingresar ni responder)
+echo.
+echo   4. Quitar aviso / pantalla roja en computadoras Windows de alumnos:
+echo      Descargar y ejecutar en 1 clic:
+echo      http://!LAN_IP!:!PORT!/cert/Instalar-Certificado-Windows.bat
+echo.
+echo ==============================================================
+echo.
+pause
+exit /b 0
+
+:ADVANCED_MENU
+cls
+echo ==============================================================
+echo                       OPCIONES AVANZADAS
+echo ==============================================================
+echo.
+echo   [1] Reiniciar servidor (Recargar cambios de codigo)
+echo   [2] Ver registro de actividad (log) y errores
+echo   [3] Cambiar puertos de red (Actual HTTP !PORT! | HTTPS !HTTPS_PORT!)
+echo   [4] Forzar verificacion / regeneracion de certificados SSL
+echo   [0] Volver al menu principal
+echo.
+echo ==============================================================
+echo.
+set "ADV_OPT="
+set /p "ADV_OPT=Selecciona una opcion avanzada [0]: "
+if "%ADV_OPT%"=="1" (
+    call :STOP_SERVER
+    powershell -NoProfile -Command "Start-Sleep -Seconds 1"
+    call :START_SERVER interactive
+    pause
+    goto :ADVANCED_MENU
+)
+if "%ADV_OPT%"=="2" (
+    call :VIEW_LOGS
+    goto :ADVANCED_MENU
+)
+if "%ADV_OPT%"=="3" (
+    call :EDIT_CONFIG
+    goto :ADVANCED_MENU
+)
+if "%ADV_OPT%"=="4" (
+    call :ENSURE_CERTS verbose
+    pause
+    goto :ADVANCED_MENU
 )
 exit /b 0
 
