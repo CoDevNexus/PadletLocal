@@ -273,8 +273,10 @@
     unreadChatCount: 0,
     isChatOpen: false,
     activeChatTab: 'messages',
+    chatCurrentView: 'list', // 'list' | 'thread'
     activeChatThread: 'all', // 'all' | 'teachers' | 'user:<authorId>'
     activeRecipient: 'all',
+    readMessageIds: new Set(JSON.parse(localStorage.getItem('padletlocal_read_msgs') || '[]')),
     board: {
       title: 'PadletLocal',
       description: 'Panel colaborativo en red local — ideas, imágenes y pantalla compartida en tiempo real.',
@@ -459,9 +461,15 @@
     btnClearChat: document.getElementById('btnClearChat'),
     btnCloseChat: document.getElementById('btnCloseChat'),
     tabChatMessages: document.getElementById('tabChatMessages'),
+    tabChatUnreadBadge: document.getElementById('tabChatUnreadBadge'),
     tabChatUsers: document.getElementById('tabChatUsers'),
     chatOnlineUsersCount: document.getElementById('chatOnlineUsersCount'),
     chatMessagesPane: document.getElementById('chatMessagesPane'),
+    chatConversationsListView: document.getElementById('chatConversationsListView'),
+    chatConversationsList: document.getElementById('chatConversationsList'),
+    btnChatGoToOnline: document.getElementById('btnChatGoToOnline'),
+    chatThreadView: document.getElementById('chatThreadView'),
+    btnBackToConvList: document.getElementById('btnBackToConvList'),
     chatRecipientSelect: document.getElementById('chatRecipientSelect'),
     chatPrivacyNote: document.getElementById('chatPrivacyNote'),
     chatMessagesList: document.getElementById('chatMessagesList'),
@@ -817,16 +825,27 @@
   };
 
   // --- Toast Helper ---
-  function showToast(message, type = 'info') {
+  function showToast(message, type = 'info', onClick = null) {
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
+    toast.className = `toast ${type} ${typeof onClick === 'function' ? 'is-clickable' : ''}`;
+    if (typeof message === 'string') {
+      toast.innerHTML = message;
+    } else if (message instanceof HTMLElement) {
+      toast.appendChild(message);
+    }
+    if (typeof onClick === 'function') {
+      toast.title = 'Haz clic para abrir este mensaje en el chat';
+      toast.addEventListener('click', () => {
+        onClick();
+        toast.remove();
+      });
+    }
     el.toastContainer.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transition = 'opacity 0.25s ease';
       setTimeout(() => toast.remove(), 260);
-    }, 3200);
+    }, 4500);
   }
 
   // --- Modal Helpers ---
@@ -6967,6 +6986,80 @@
   // =====================================================================
   // LIVE SESSION CHAT DRAWER & INDEPENDENT ENCRYPTED MESSAGING
   // =====================================================================
+  function getThreadKeyForMessage(msg) {
+    if (!msg) return 'all';
+    if (!msg.isPrivate || msg.to === 'all') return 'all';
+    const mFrom = msg.fromId || msg.authorId;
+    const mTo = msg.to;
+    if (mTo === 'teacher' || mTo === 'teachers' || msg.fromRole === 'teacher' || msg.isTeacher) {
+      if (state.isTeacher) {
+        const studentId = (msg.fromRole === 'teacher' || msg.isTeacher)
+          ? (mTo.startsWith('user:') ? mTo.slice(5) : mTo)
+          : mFrom;
+        return `user:${studentId}`;
+      } else {
+        return 'teachers';
+      }
+    }
+    const otherId = (mFrom === authorId)
+      ? (mTo.startsWith('user:') ? mTo.slice(5) : mTo)
+      : mFrom;
+    return `user:${otherId}`;
+  }
+
+  function calculateUnreads() {
+    const unreads = {};
+    let totalUnread = 0;
+    (state.chatMessages || []).forEach((m) => {
+      const isFromMe = (m.authorId === authorId || m.fromId === authorId);
+      if (isFromMe) return;
+      if (!state.readMessageIds.has(m.id)) {
+        const threadKey = getThreadKeyForMessage(m);
+        unreads[threadKey] = (unreads[threadKey] || 0) + 1;
+        totalUnread++;
+      }
+    });
+    state.unreadByThread = unreads;
+    state.unreadChatCount = totalUnread;
+
+    // Update tab badge
+    if (el.tabChatUnreadBadge) {
+      if (totalUnread > 0) {
+        el.tabChatUnreadBadge.textContent = String(totalUnread);
+        el.tabChatUnreadBadge.classList.remove('hidden');
+      } else {
+        el.tabChatUnreadBadge.textContent = '0';
+        el.tabChatUnreadBadge.classList.add('hidden');
+      }
+    }
+
+    // Update floating buttons
+    const countStr = String(Math.min(99, totalUnread));
+    if (el.chatUnreadBadge) {
+      el.chatUnreadBadge.textContent = countStr;
+      el.chatUnreadBadge.classList.toggle('hidden', totalUnread === 0);
+    }
+    if (el.fabChatBadge) {
+      el.fabChatBadge.textContent = countStr;
+      el.fabChatBadge.classList.toggle('hidden', totalUnread === 0);
+    }
+  }
+
+  function markThreadAsRead(threadKey) {
+    if (!threadKey) return;
+    (state.chatMessages || []).forEach((m) => {
+      if (isMsgInThread(m, threadKey)) {
+        state.readMessageIds.add(m.id);
+      }
+    });
+    try {
+      const arr = Array.from(state.readMessageIds).slice(-500);
+      localStorage.setItem('padletlocal_read_msgs', JSON.stringify(arr));
+    } catch {}
+    calculateUnreads();
+    renderConversationsList();
+  }
+
   function updateChatThreadBannerUI() {
     const thread = state.activeChatThread || 'all';
     if (!el.chatThreadTitle) return;
@@ -7029,17 +7122,181 @@
     return false;
   }
 
+  function openConversationThread(threadKey) {
+    state.activeChatThread = threadKey || 'all';
+    state.chatCurrentView = 'thread';
+
+    if (el.chatConversationsListView) el.chatConversationsListView.classList.add('hidden');
+    if (el.chatThreadView) el.chatThreadView.classList.remove('hidden');
+
+    if (el.chatRecipientSelect) {
+      if (!el.chatRecipientSelect.querySelector(`option[value="${CSS.escape(state.activeChatThread)}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = state.activeChatThread;
+        opt.textContent = `💬 ${state.activeChatThread} (Privado)`;
+        el.chatRecipientSelect.appendChild(opt);
+      }
+      el.chatRecipientSelect.value = state.activeChatThread;
+    }
+
+    updateChatThreadBannerUI();
+    renderChatMessages(state.chatMessages);
+    markThreadAsRead(state.activeChatThread);
+
+    if (!state.isChatOpen) {
+      openChatDrawer();
+    }
+    switchChatTab('messages');
+
+    setTimeout(() => {
+      if (el.chatInputText) el.chatInputText.focus();
+    }, 120);
+  }
+
+  function openConversationsListView() {
+    state.chatCurrentView = 'list';
+    if (el.chatConversationsListView) el.chatConversationsListView.classList.remove('hidden');
+    if (el.chatThreadView) el.chatThreadView.classList.add('hidden');
+    calculateUnreads();
+    renderConversationsList();
+  }
+
+  function renderConversationsList() {
+    if (!el.chatConversationsList) return;
+
+    calculateUnreads();
+
+    // Collect all conversations
+    const convMap = new Map();
+
+    // 1. Canal General
+    const allMsgs = (state.chatMessages || []).filter((m) => !m.isPrivate || m.to === 'all');
+    const lastAll = allMsgs[allMsgs.length - 1];
+    convMap.set('all', {
+      threadKey: 'all',
+      title: 'Canal General (Toda la clase)',
+      roleTag: '<span class="chat-bubble-role-tag" style="background:rgba(59,130,246,0.15);color:#3b82f6;">📢 Público</span>',
+      avatarBg: '#3b82f6',
+      avatarContent: '📢',
+      isOnline: true,
+      lastMsg: lastAll ? `${lastAll.authorName || 'Alguien'}: ${lastAll.text}` : 'Canal público de la sesión de clase',
+      lastTime: lastAll ? formatRelativeTime(lastAll.createdAt) : '',
+      lastTimestamp: lastAll ? lastAll.timestamp || 0 : 1,
+      unread: state.unreadByThread['all'] || 0,
+    });
+
+    // 2. Docente (for students)
+    if (!state.isTeacher) {
+      const teacherMsgs = (state.chatMessages || []).filter((m) => isMsgInThread(m, 'teachers'));
+      const lastTeacher = teacherMsgs[teacherMsgs.length - 1];
+      const teacherOnline = (state.chatUsers || []).some((u) => u.isTeacher);
+      convMap.set('teachers', {
+        threadKey: 'teachers',
+        title: 'Docente (Privado)',
+        roleTag: '<span class="chat-bubble-role-tag role-tag-teacher">🎓 Docente</span>',
+        avatarBg: '#6366f1',
+        avatarContent: '🎓',
+        isOnline: teacherOnline,
+        lastMsg: lastTeacher ? `${lastTeacher.authorName || 'Docente'}: ${lastTeacher.text}` : 'Chat privado e independiente con el profesor',
+        lastTime: lastTeacher ? formatRelativeTime(lastTeacher.createdAt) : '',
+        lastTimestamp: lastTeacher ? lastTeacher.timestamp || 0 : 2,
+        unread: state.unreadByThread['teachers'] || 0,
+      });
+    }
+
+    // 3. Private 1-to-1 conversations with other users
+    const partnerIds = new Set();
+    (state.chatMessages || []).forEach((m) => {
+      if (m.isPrivate && m.to !== 'all') {
+        const mFrom = m.fromId || m.authorId;
+        const mTo = m.to;
+        if (state.isTeacher && (mTo === 'teacher' || mTo === 'teachers' || m.fromRole === 'teacher')) {
+          const studentId = (m.fromRole === 'teacher')
+            ? (mTo.startsWith('user:') ? mTo.slice(5) : mTo)
+            : mFrom;
+          if (studentId && studentId !== authorId) partnerIds.add(studentId);
+        } else {
+          if (mFrom && mFrom !== authorId) partnerIds.add(mFrom);
+          if (mTo && mTo.startsWith('user:')) {
+            const tId = mTo.slice(5);
+            if (tId !== authorId) partnerIds.add(tId);
+          }
+        }
+      }
+    });
+
+    // Also include online users so you can tap them directly in the chat list
+    (state.chatUsers || []).forEach((u) => {
+      if (u.authorId && u.authorId !== authorId) {
+        partnerIds.add(u.authorId);
+      }
+    });
+
+    partnerIds.forEach((pId) => {
+      const threadKey = `user:${pId}`;
+      const threadMsgs = (state.chatMessages || []).filter((m) => isMsgInThread(m, threadKey));
+      const lastMsg = threadMsgs[threadMsgs.length - 1];
+      const partnerUser = (state.chatUsers || []).find((u) => u.authorId === pId);
+      const isOnline = Boolean(partnerUser);
+      const name = partnerUser?.name || lastMsg?.authorName || lastMsg?.toName || 'Usuario';
+      const isTeacherPartner = Boolean(partnerUser?.isTeacher || lastMsg?.fromRole === 'teacher');
+      const initials = getInitials(name);
+      const color = getAvatarColor(name || pId);
+      const roleTag = isTeacherPartner
+        ? '<span class="chat-bubble-role-tag role-tag-teacher">🎓 Docente</span>'
+        : '<span class="chat-bubble-role-tag role-tag-student">🎒 Alumno</span>';
+
+      convMap.set(threadKey, {
+        threadKey,
+        title: name,
+        roleTag,
+        avatarBg: color,
+        avatarContent: escapeHtml(initials),
+        isOnline,
+        lastMsg: lastMsg ? `${lastMsg.authorName || 'Alguien'}: ${lastMsg.text}` : 'Toca para iniciar una conversación privada',
+        lastTime: lastMsg ? formatRelativeTime(lastMsg.createdAt) : '',
+        lastTimestamp: lastMsg ? lastMsg.timestamp || 0 : 0,
+        unread: state.unreadByThread[threadKey] || 0,
+      });
+    });
+
+    // Sort: Conversations with unread first, then by last timestamp (newest first)
+    const sorted = Array.from(convMap.values()).sort((a, b) => {
+      if (a.unread > 0 && b.unread === 0) return -1;
+      if (a.unread === 0 && b.unread > 0) return 1;
+      return (b.lastTimestamp || 0) - (a.lastTimestamp || 0);
+    });
+
+    el.chatConversationsList.innerHTML = sorted
+      .map((c) => {
+        const hasUnread = c.unread > 0;
+        return `
+          <div class="chat-conv-item ${hasUnread ? 'has-unread' : ''}" data-conv-thread="${escapeHtml(c.threadKey)}">
+            <div class="chat-conv-avatar" style="background:${c.avatarBg};">
+              ${c.avatarContent}
+              ${c.isOnline ? '<span class="chat-conv-online-dot" title="En línea"></span>' : ''}
+            </div>
+            <div class="chat-conv-body">
+              <div class="chat-conv-row-top">
+                <span class="chat-conv-name">
+                  ${escapeHtml(c.title)}
+                  ${c.roleTag}
+                </span>
+                <span class="chat-conv-time">${escapeHtml(c.lastTime)}</span>
+              </div>
+              <div class="chat-conv-row-bottom">
+                <span class="chat-conv-last-msg">${escapeHtml(c.lastMsg)}</span>
+                ${hasUnread ? `<span class="chat-unread-pill">${c.unread}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
   function openChatDrawer() {
     state.isChatOpen = true;
-    state.unreadChatCount = 0;
-    if (el.chatUnreadBadge) {
-      el.chatUnreadBadge.textContent = '0';
-      el.chatUnreadBadge.classList.add('hidden');
-    }
-    if (el.fabChatBadge) {
-      el.fabChatBadge.textContent = '0';
-      el.fabChatBadge.classList.add('hidden');
-    }
     if (el.chatDrawer) el.chatDrawer.classList.remove('hidden');
     if (el.chatSessionBadge) {
       el.chatSessionBadge.textContent = state.board?.eventName || state.board?.title || 'Sesión';
@@ -7048,11 +7305,16 @@
       el.chatCurrentUserName.textContent = state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno');
     }
 
-    updateChatThreadBannerUI();
-
     socket.emit('chat:history', { sessionId: state.activeSessionId }, (res) => {
       if (res?.ok && Array.isArray(res.messages)) {
-        renderChatMessages(res.messages);
+        state.chatMessages = res.messages;
+        calculateUnreads();
+        if (state.chatCurrentView === 'thread') {
+          renderChatMessages(state.chatMessages);
+          markThreadAsRead(state.activeChatThread);
+        } else {
+          renderConversationsList();
+        }
       }
     });
 
@@ -7062,9 +7324,20 @@
       }
     });
 
-    setTimeout(() => {
-      if (el.chatInputText) el.chatInputText.focus();
-    }, 150);
+    if (state.chatCurrentView === 'thread') {
+      if (el.chatConversationsListView) el.chatConversationsListView.classList.add('hidden');
+      if (el.chatThreadView) el.chatThreadView.classList.remove('hidden');
+      updateChatThreadBannerUI();
+      renderChatMessages(state.chatMessages);
+      markThreadAsRead(state.activeChatThread);
+      setTimeout(() => {
+        if (el.chatInputText) el.chatInputText.focus();
+      }, 150);
+    } else {
+      if (el.chatConversationsListView) el.chatConversationsListView.classList.remove('hidden');
+      if (el.chatThreadView) el.chatThreadView.classList.add('hidden');
+      renderConversationsList();
+    }
   }
 
   function closeChatDrawer() {
@@ -7085,6 +7358,12 @@
           renderChatUsers(res.users);
         }
       });
+    } else if (tab === 'messages') {
+      if (state.chatCurrentView === 'list') {
+        renderConversationsList();
+      } else {
+        renderChatMessages(state.chatMessages);
+      }
     }
   }
 
@@ -7162,68 +7441,77 @@
     if (!Array.isArray(state.chatMessages)) state.chatMessages = [];
     state.chatMessages.push(msg);
 
-    const thread = state.activeChatThread || 'all';
-    const belongsToCurrentThread = isMsgInThread(msg, thread);
+    const msgThread = getThreadKeyForMessage(msg);
+    const isFromMe = (msg.authorId === authorId || msg.fromId === authorId);
 
-    if (state.isChatOpen) {
-      if (belongsToCurrentThread) {
-        const empty = el.chatMessagesList.querySelector('.chat-empty-state');
-        if (empty) empty.remove();
+    // If chat drawer is open AND viewing this thread:
+    if (state.isChatOpen && state.chatCurrentView === 'thread' && state.activeChatThread === msgThread) {
+      state.readMessageIds.add(msg.id);
+      calculateUnreads();
 
-        const isOutgoing = (msg.authorId === authorId || msg.fromId === authorId);
-        const isPriv = Boolean(msg.isPrivate);
-        const roleTag = msg.isTeacher
-          ? '<span class="chat-bubble-role-tag role-tag-teacher">🎓 Docente</span>'
-          : '<span class="chat-bubble-role-tag role-tag-student">🎒 Alumno</span>';
-        const privateBadge = isPriv
-          ? `<span class="chat-bubble-badge-private">🔒 ${
-              isOutgoing
-                ? `Para: ${escapeHtml(msg.toName || 'Privado')}`
-                : `De: ${escapeHtml(msg.authorName || 'Usuario')}`
-            }</span>`
-          : '';
-        const encBadge = (msg.isEncrypted || isPriv)
-          ? `<span class="chat-bubble-encrypted-badge" title="Mensaje cifrado y protegido">🔒 Cifrado</span>`
-          : '';
-        const deleteBtn = isOutgoing
-          ? `<button type="button" class="btn-chat-delete-msg" data-msg-id="${escapeHtml(msg.id)}" title="Eliminar mi mensaje">🗑️</button>`
-          : '';
+      const empty = el.chatMessagesList.querySelector('.chat-empty-state');
+      if (empty) empty.remove();
 
-        const bubble = document.createElement('div');
-        bubble.className = `chat-bubble ${isOutgoing ? 'is-outgoing' : 'is-incoming'} ${
-          isPriv ? 'is-private' : ''
-        }`;
-        bubble.innerHTML = `
-          <div class="chat-bubble-head">
-            <span class="chat-bubble-author">${escapeHtml(
-              msg.authorName || (msg.isTeacher ? 'Docente' : 'Alumno')
-            )}</span>
-            ${roleTag}
-            ${privateBadge}
-            ${encBadge}
-            <span class="chat-bubble-time">${formatRelativeTime(msg.createdAt)}</span>
-            ${deleteBtn}
-          </div>
-          <p class="chat-bubble-text">${formatTextWithLinks(msg.text)}</p>
-        `;
-        el.chatMessagesList.appendChild(bubble);
-        el.chatMessagesList.scrollTop = el.chatMessagesList.scrollHeight;
-      } else {
-        const sender = msg.authorName || 'Alguien';
-        showToast(`💬 ${sender} te envió un mensaje privado en otro hilo`, 'info');
-      }
+      const isOutgoing = isFromMe;
+      const isPriv = Boolean(msg.isPrivate);
+      const roleTag = msg.isTeacher
+        ? '<span class="chat-bubble-role-tag role-tag-teacher">🎓 Docente</span>'
+        : '<span class="chat-bubble-role-tag role-tag-student">🎒 Alumno</span>';
+      const privateBadge = isPriv
+        ? `<span class="chat-bubble-badge-private">🔒 ${
+            isOutgoing
+              ? `Para: ${escapeHtml(msg.toName || 'Privado')}`
+              : `De: ${escapeHtml(msg.authorName || 'Usuario')}`
+          }</span>`
+        : '';
+      const encBadge = (msg.isEncrypted || isPriv)
+        ? `<span class="chat-bubble-encrypted-badge" title="Mensaje cifrado y protegido">🔒 Cifrado</span>`
+        : '';
+      const deleteBtn = isOutgoing
+        ? `<button type="button" class="btn-chat-delete-msg" data-msg-id="${escapeHtml(msg.id)}" title="Eliminar mi mensaje">🗑️</button>`
+        : '';
+
+      const bubble = document.createElement('div');
+      bubble.className = `chat-bubble ${isOutgoing ? 'is-outgoing' : 'is-incoming'} ${
+        isPriv ? 'is-private' : ''
+      }`;
+      bubble.innerHTML = `
+        <div class="chat-bubble-head">
+          <span class="chat-bubble-author">${escapeHtml(
+            msg.authorName || (msg.isTeacher ? 'Docente' : 'Alumno')
+          )}</span>
+          ${roleTag}
+          ${privateBadge}
+          ${encBadge}
+          <span class="chat-bubble-time">${formatRelativeTime(msg.createdAt)}</span>
+          ${deleteBtn}
+        </div>
+        <p class="chat-bubble-text">${formatTextWithLinks(msg.text)}</p>
+      `;
+      el.chatMessagesList.appendChild(bubble);
+      el.chatMessagesList.scrollTop = el.chatMessagesList.scrollHeight;
     } else {
-      state.unreadChatCount = (state.unreadChatCount || 0) + 1;
-      const countStr = String(Math.min(99, state.unreadChatCount));
-      if (el.chatUnreadBadge) {
-        el.chatUnreadBadge.textContent = countStr;
-        el.chatUnreadBadge.classList.remove('hidden');
+      // Received while in another thread or while chat closed
+      calculateUnreads();
+      if (state.isChatOpen && state.chatCurrentView === 'list') {
+        renderConversationsList();
       }
-      if (el.fabChatBadge) {
-        el.fabChatBadge.textContent = countStr;
-        el.fabChatBadge.classList.remove('hidden');
+
+      if (!isFromMe) {
+        playChime('info');
+        const sender = msg.authorName || (msg.isTeacher ? 'Docente' : 'Alumno');
+        const shortSnippet = msg.text.length > 50 ? msg.text.slice(0, 47) + '...' : msg.text;
+        const toastHtml = `
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:1.15rem;">💬</span>
+            <div>
+              <strong>${escapeHtml(sender)}</strong>: "${escapeHtml(shortSnippet)}"<br>
+              <small style="opacity:0.85;color:#818cf8;font-weight:600;">👉 Toca aquí para abrir y responder</small>
+            </div>
+          </div>
+        `;
+        showToast(toastHtml, 'info', () => openConversationThread(msgThread));
       }
-      playChime('info');
     }
   }
 
@@ -7359,10 +7647,31 @@
   el.tabChatMessages?.addEventListener('click', () => switchChatTab('messages'));
   el.tabChatUsers?.addEventListener('click', () => switchChatTab('users'));
 
+  // Navigation: Back from Open Thread to Conversations List
+  el.btnBackToConvList?.addEventListener('click', () => {
+    openConversationsListView();
+  });
+
+  // Navigation: Quick jump to online users from conversation list
+  el.btnChatGoToOnline?.addEventListener('click', () => {
+    switchChatTab('users');
+  });
+
+  // Clicking an item in the conversations list opens that thread!
+  el.chatConversationsList?.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-conv-thread]');
+    if (!item) return;
+    const threadKey = item.dataset.convThread;
+    if (threadKey) {
+      openConversationThread(threadKey);
+    }
+  });
+
   el.chatRecipientSelect?.addEventListener('change', () => {
     state.activeChatThread = el.chatRecipientSelect.value;
     updateChatThreadBannerUI();
     renderChatMessages(state.chatMessages);
+    markThreadAsRead(state.activeChatThread);
   });
 
   // Message deletion: author can delete their own message
@@ -7386,6 +7695,7 @@
         showToast('Mensaje eliminado', 'info');
         state.chatMessages = (state.chatMessages || []).filter((m) => m.id !== msgId);
         renderChatMessages(state.chatMessages);
+        calculateUnreads();
       }
     });
   });
@@ -7442,22 +7752,7 @@
     const btnPrivate = e.target.closest('.btn-chat-action-private');
     if (btnPrivate) {
       const targetAuthorId = btnPrivate.dataset.authorId;
-      const targetName = btnPrivate.dataset.authorName;
-      state.activeChatThread = `user:${targetAuthorId}`;
-      if (el.chatRecipientSelect) {
-        if (!el.chatRecipientSelect.querySelector(`option[value="user:${CSS.escape(targetAuthorId)}"]`)) {
-          const opt = document.createElement('option');
-          opt.value = `user:${targetAuthorId}`;
-          opt.textContent = `💬 ${targetName} (Privado)`;
-          opt.dataset.userName = targetName;
-          el.chatRecipientSelect.appendChild(opt);
-        }
-        el.chatRecipientSelect.value = `user:${targetAuthorId}`;
-      }
-      updateChatThreadBannerUI();
-      renderChatMessages(state.chatMessages);
-      switchChatTab('messages');
-      setTimeout(() => el.chatInputText?.focus(), 100);
+      openConversationThread(`user:${targetAuthorId}`);
       return;
     }
 
@@ -7476,6 +7771,9 @@
     const btnMention = e.target.closest('.btn-chat-action-mention');
     if (btnMention) {
       const targetName = btnMention.dataset.authorName;
+      if (state.chatCurrentView === 'list') {
+        openConversationThread('all');
+      }
       switchChatTab('messages');
       if (el.chatInputText) {
         el.chatInputText.value = `@${targetName} ${el.chatInputText.value}`;
@@ -7521,6 +7819,9 @@
     const sid = data?.sessionId;
     if (!sid || sid === state.activeSessionId) {
       renderChatUsers(list);
+      if (state.chatCurrentView === 'list') {
+        renderConversationsList();
+      }
     }
   });
 
@@ -7531,14 +7832,24 @@
   socket.on('chat:message:deleted', ({ sessionId, messageId }) => {
     if (!sessionId || sessionId === state.activeSessionId) {
       state.chatMessages = (state.chatMessages || []).filter((m) => m.id !== messageId);
-      renderChatMessages(state.chatMessages);
+      calculateUnreads();
+      if (state.chatCurrentView === 'thread') {
+        renderChatMessages(state.chatMessages);
+      } else {
+        renderConversationsList();
+      }
     }
   });
 
   socket.on('chat:cleared', ({ sessionId }) => {
     if (sessionId === state.activeSessionId) {
       state.chatMessages = [];
-      renderChatMessages([]);
+      calculateUnreads();
+      if (state.chatCurrentView === 'thread') {
+        renderChatMessages([]);
+      } else {
+        renderConversationsList();
+      }
       showToast('Chat de la sesión limpiado');
     }
   });

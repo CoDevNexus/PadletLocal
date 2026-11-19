@@ -238,7 +238,8 @@
 
     <div class="chat-tabs" role="tablist">
       <button type="button" id="tabChatMessages" class="chat-tab active">
-        <span>💬 Mensajes</span>
+        <span>💬 Chats</span>
+        <span id="tabChatUnreadBadge" class="chat-tab-count chat-tab-count-unread hidden">0</span>
       </button>
       <button type="button" id="tabChatUsers" class="chat-tab">
         <span>👥 En línea</span>
@@ -248,41 +249,60 @@
 
     <!-- Messages Pane -->
     <div id="chatMessagesPane" class="chat-pane active">
-      <div class="chat-target-bar">
-        <label for="chatRecipientSelect" class="chat-target-label">Conversación:</label>
-        <select id="chatRecipientSelect" class="chat-recipient-select">
-          <option value="all">📢 Canal General (Toda la clase)</option>
-          <option value="teachers">🎓 Chat con Docente (Privado)</option>
-        </select>
-      </div>
-      <div id="chatThreadBanner" class="chat-thread-banner">
-        <div class="chat-thread-banner-left">
-          <span id="chatThreadIcon">📢</span>
-          <strong id="chatThreadTitle">Canal General de la Clase</strong>
+      <!-- Sub-view 1: Lista de Conversaciones con Contador de No Leídos -->
+      <div id="chatConversationsListView" class="chat-conversations-view">
+        <div class="chat-conv-header-row">
+          <span class="chat-conv-header-title">💬 Mis Conversaciones</span>
+          <button type="button" id="btnChatGoToOnline" class="btn btn-xs btn-secondary" title="Ver usuarios conectados para iniciar chat">＋ Nuevo chat</button>
         </div>
-        <span id="chatThreadBadge" class="chat-thread-badge badge-public">Público</span>
-      </div>
-      <div id="chatPrivacyNote" class="chat-privacy-note hidden">
-        🔒 <span>Chat privado e independiente: protegido y cifrado con privacidad estricta.</span>
-      </div>
-
-      <div id="chatMessagesList" class="chat-messages-list">
-        <div class="chat-empty-state">
-          <div class="chat-empty-icon">💬</div>
-          <p>No hay mensajes en esta sesión aún.</p>
-          <span class="muted-note">Los mensajes son por sesión y con privacidad estricta.</span>
+        <div id="chatConversationsList" class="chat-conversations-list">
+          <!-- Rendered dynamically -->
         </div>
       </div>
 
-      <form id="chatForm" class="chat-input-form">
-        <input id="chatInputText" type="text" maxlength="500" placeholder="Escribe un mensaje..." autocomplete="off" required />
-        <button type="submit" id="btnSendChat" class="btn btn-primary btn-chat-send" title="Enviar mensaje">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13" />
-            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-          </svg>
-        </button>
-      </form>
+      <!-- Sub-view 2: Vista de Conversación Abierta (Mensajes y Envío) -->
+      <div id="chatThreadView" class="chat-thread-view hidden">
+        <div class="chat-thread-header-bar">
+          <button type="button" id="btnBackToConvList" class="btn btn-xs btn-ghost btn-chat-back" title="Volver a la lista de chats">
+            ← Chats
+          </button>
+          <div class="chat-thread-header-info">
+            <span id="chatThreadIcon">📢</span>
+            <strong id="chatThreadTitle" class="chat-thread-title-text">Canal General</strong>
+          </div>
+          <span id="chatThreadBadge" class="chat-thread-badge badge-public">Público</span>
+        </div>
+
+        <div class="chat-target-bar">
+          <label for="chatRecipientSelect" class="chat-target-label">Conversación:</label>
+          <select id="chatRecipientSelect" class="chat-recipient-select">
+            <option value="all">📢 Canal General (Toda la clase)</option>
+            <option value="teachers">🎓 Chat con Docente (Privado)</option>
+          </select>
+        </div>
+
+        <div id="chatPrivacyNote" class="chat-privacy-note hidden">
+          🔒 <span>Chat privado e independiente: protegido y cifrado con privacidad estricta.</span>
+        </div>
+
+        <div id="chatMessagesList" class="chat-messages-list">
+          <div class="chat-empty-state">
+            <div class="chat-empty-icon">💬</div>
+            <p>No hay mensajes en esta conversación aún.</p>
+            <span class="muted-note">Los mensajes son por sesión y con privacidad estricta.</span>
+          </div>
+        </div>
+
+        <form id="chatForm" class="chat-input-form">
+          <input id="chatInputText" type="text" maxlength="500" placeholder="Escribe un mensaje..." autocomplete="off" required />
+          <button type="submit" id="btnSendChat" class="btn btn-primary btn-chat-send" title="Enviar mensaje">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </form>
+      </div>
     </div>
 
     <!-- Online Participants Pane -->
