@@ -48,6 +48,7 @@ function createBlankSession({
     quizzes: [],
     activeQuiz: null,
     chatMessages: [],
+    disabledAuthors: [],
   };
 }
 
@@ -102,6 +103,14 @@ function normalizeSession(raw) {
     quizzes: Array.isArray(raw?.quizzes) ? raw.quizzes : [],
     activeQuiz: raw?.activeQuiz || null,
     chatMessages: Array.isArray(raw?.chatMessages) ? raw.chatMessages.slice(-500) : [],
+    disabledAuthors: Array.isArray(raw?.disabledAuthors)
+      ? raw.disabledAuthors.map((d) => ({
+          authorId: d.authorId || null,
+          name: d.name || 'Alumno',
+          disabledAt: d.disabledAt || new Date().toISOString(),
+          disabledBy: d.disabledBy || 'Profesor',
+        }))
+      : [],
   };
 }
 
@@ -1865,6 +1874,149 @@ class BoardStore {
     session.chatMessages = [];
     this.save();
     return true;
+  }
+
+  // --- Student Management: Disable / Enable / Expel ---
+  getDisabledAuthors(sessionId = null) {
+    const session = this.resolveSession(sessionId);
+    return Array.isArray(session.disabledAuthors) ? session.disabledAuthors : [];
+  }
+
+  isAuthorDisabled(authorId, authorName = null, sessionId = null) {
+    const session = this.resolveSession(sessionId);
+    const list = Array.isArray(session.disabledAuthors) ? session.disabledAuthors : [];
+    if (!list.length) return false;
+    const cleanId = authorId ? String(authorId).trim() : null;
+    const cleanName = authorName ? String(authorName).trim().toLowerCase() : null;
+
+    return list.some((d) => {
+      if (cleanId && d.authorId && d.authorId === cleanId) return true;
+      if (cleanName && d.name && d.name.trim().toLowerCase() === cleanName) return true;
+      return false;
+    });
+  }
+
+  toggleDisableAuthor(
+    authorId,
+    authorName = 'Alumno',
+    { disabledBy = 'Profesor', disabled = null } = {},
+    sessionId = null
+  ) {
+    const session = this.resolveSession(sessionId);
+    if (!Array.isArray(session.disabledAuthors)) {
+      session.disabledAuthors = [];
+    }
+
+    const cleanId = authorId ? String(authorId).trim() : null;
+    const cleanName = (authorName || 'Alumno').trim();
+    const cleanNameLower = cleanName.toLowerCase();
+
+    const existingIdx = session.disabledAuthors.findIndex((d) => {
+      if (cleanId && d.authorId && d.authorId === cleanId) return true;
+      if (d.name && d.name.trim().toLowerCase() === cleanNameLower) return true;
+      return false;
+    });
+
+    let nowDisabled = false;
+    if (existingIdx >= 0) {
+      if (disabled === true) {
+        nowDisabled = true;
+      } else {
+        session.disabledAuthors.splice(existingIdx, 1);
+        nowDisabled = false;
+      }
+    } else {
+      if (disabled === false) {
+        nowDisabled = false;
+      } else {
+        session.disabledAuthors.push({
+          authorId: cleanId,
+          name: cleanName,
+          disabledAt: new Date().toISOString(),
+          disabledBy: String(disabledBy).slice(0, 60),
+        });
+        nowDisabled = true;
+      }
+    }
+
+    this.save();
+    return {
+      authorId: cleanId,
+      authorName: cleanName,
+      disabled: nowDisabled,
+      disabledAuthors: session.disabledAuthors,
+    };
+  }
+
+  getParticipatingStudents(sessionId = null) {
+    const session = this.resolveSession(sessionId);
+    const authorMap = new Map();
+
+    // From posts
+    (session.posts || []).forEach((p) => {
+      const name = (p.author || 'Anónimo').trim();
+      const id = p.authorId || name.toLowerCase();
+      const lower = id.toLowerCase();
+      const prev = authorMap.get(lower);
+      if (prev) {
+        prev.postsCount++;
+        if (p.authorIsTeacher) prev.isTeacher = true;
+      } else {
+        authorMap.set(lower, {
+          authorId: p.authorId || null,
+          name,
+          isTeacher: Boolean(p.authorIsTeacher),
+          postsCount: 1,
+        });
+      }
+    });
+
+    // From chat
+    (session.chatMessages || []).forEach((m) => {
+      const name = (m.author || '').trim();
+      if (!name) return;
+      const id = m.fromId || m.authorId || name.toLowerCase();
+      const lower = id.toLowerCase();
+      const prev = authorMap.get(lower);
+      if (prev) {
+        if (m.fromRole === 'teacher' || m.isTeacher) prev.isTeacher = true;
+      } else {
+        authorMap.set(lower, {
+          authorId: m.fromId || m.authorId || null,
+          name,
+          isTeacher: m.fromRole === 'teacher' || Boolean(m.isTeacher),
+          postsCount: 0,
+        });
+      }
+    });
+
+    // Disabled status check
+    const disabledList = Array.isArray(session.disabledAuthors) ? session.disabledAuthors : [];
+    disabledList.forEach((d) => {
+      const id = d.authorId || d.name.toLowerCase();
+      const lower = id.toLowerCase();
+      const prev = authorMap.get(lower);
+      if (prev) {
+        prev.isDisabled = true;
+        prev.disabledAt = d.disabledAt;
+        prev.disabledBy = d.disabledBy;
+      } else {
+        authorMap.set(lower, {
+          authorId: d.authorId || null,
+          name: d.name,
+          isTeacher: false,
+          postsCount: 0,
+          isDisabled: true,
+          disabledAt: d.disabledAt,
+          disabledBy: d.disabledBy,
+        });
+      }
+    });
+
+    return Array.from(authorMap.values()).map((s) => ({
+      ...s,
+      isDisabled: Boolean(s.isDisabled || this.isAuthorDisabled(s.authorId, s.name, sessionId)),
+    }));
   }
 }
 

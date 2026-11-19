@@ -439,6 +439,13 @@
             <span class="action-menu-item-desc">Crear, cerrar o despublicar clases</span>
           </div>
         </button>
+        <button type="button" class="action-menu-item" id="menuItemTeacherStudents">
+          <span class="action-menu-item-icon">👥</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Alumnos y Participantes</span>
+            <span class="action-menu-item-desc">Expulsar alumnos o deshabilitarlos (modo solo lectura)</span>
+          </div>
+        </button>
         <button type="button" class="action-menu-item" id="menuItemTeacherScreens">
           <span class="action-menu-item-icon">🖥️</span>
           <div class="action-menu-item-content">
@@ -537,6 +544,15 @@
     <div class="session-status-inner">
       <span id="sessionStatusText"></span>
       <div id="sessionStatusActions" class="session-status-actions"></div>
+    </div>
+  </div>
+
+  <div id="studentDisabledBanner" class="session-status-banner hidden" role="alert" style="background:#fef2f2;border-bottom:1px solid #fecaca;color:#991b1b;">
+    <div class="session-status-inner" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;">
+      <span style="font-weight:600;font-size:0.88rem;">
+        🚫 Tu cuenta ha sido deshabilitada por el profesor. Estás en modo de solo lectura (no puedes publicar, comentar ni compartir pantalla).
+      </span>
+      <span class="badge" style="background:#ef4444;color:#fff;font-size:0.75rem;padding:3px 8px;border-radius:4px;">Solo lectura</span>
     </div>
   </div>
 
@@ -919,6 +935,7 @@
 
       <div class="teacher-tabs" role="tablist">
         <button type="button" class="teacher-tab active" data-teacher-tab="assignment">📝 Tareas</button>
+        <button type="button" class="teacher-tab" data-teacher-tab="students">👥 Alumnos</button>
         <button type="button" class="teacher-tab" data-teacher-tab="quizzes">🧠 Tests / Quiz</button>
         <button type="button" class="teacher-tab" data-teacher-tab="notify">📢 Notificar</button>
         <button type="button" class="teacher-tab" data-teacher-tab="timers">⏱ Recesos</button>
@@ -1293,6 +1310,29 @@
             <button type="submit" id="btnSaveQuiz" class="btn btn-primary">💾 Guardar test (borrador)</button>
           </div>
         </form>
+      </div>
+
+      <!-- TAB: Control y Gestión de Alumnos (Expulsar / Deshabilitar) -->
+      <div class="modal-body teacher-tab-pane hidden" data-teacher-pane="students">
+        <div class="students-tab-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+          <div>
+            <strong style="color:var(--text);font-size:0.96rem;">👥 Control de Alumnos y Participantes</strong>
+            <small class="muted-note" style="display:block;margin-top:2px;">
+              Expulsa alumnos de la clase o deshabilítalos temporalmente (modo solo lectura para impedir publicaciones, comentarios y transmisiones).
+            </small>
+          </div>
+          <button type="button" id="btnRefreshStudentsList" class="btn btn-sm btn-secondary" title="Actualizar lista de participantes">🔄 Actualizar</button>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <input type="search" id="inputSearchStudents" class="form-input" placeholder="🔍 Buscar alumno por nombre..." style="width:100%;font-size:0.88rem;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);" />
+        </div>
+
+        <div id="teacherStudentsListBox" style="max-height:380px;overflow-y:auto;padding-right:4px;">
+          <div id="teacherStudentsList" class="teacher-students-list" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="muted-note" style="text-align:center;padding:24px;">Cargando lista de participantes...</div>
+          </div>
+        </div>
       </div>
 
       <div class="teacher-modal-bottom">
@@ -1837,9 +1877,36 @@
           <button type="button" id="btnDownloadPostImage" class="btn btn-sm btn-secondary hidden" title="Descargar imagen adjunta">
             🖼️ Descargar imagen
           </button>
+          <div class="post-detail-teacher-actions hidden" id="postDetailTeacherActions" style="display:flex;gap:6px;align-items:center;">
+            <button type="button" id="btnDetailToggleDisable" class="btn btn-sm btn-secondary" title="Deshabilitar o habilitar a este alumno">
+              🚫 Deshabilitar
+            </button>
+            <button type="button" id="btnDetailKick" class="btn btn-sm btn-danger" title="Expulsar a este alumno de la clase">
+              👢 Expulsar
+            </button>
+          </div>
         </div>
         <button type="button" class="btn btn-sm btn-primary" data-close-modal="postDetailModal" title="Retornar a como estaba el panel">
           ↩ Retornar a como estaba
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Student Expelled / Kicked -->
+  <div id="studentKickedModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" data-backdrop-static="true">
+    <div class="modal modal-sm" style="text-align:center;padding:28px 20px;">
+      <div style="font-size:3rem;margin-bottom:12px;">🚫</div>
+      <h2 style="color:var(--danger,#ef4444);margin-bottom:8px;">Has sido expulsado</h2>
+      <p id="studentKickedReason" style="font-size:0.92rem;color:var(--text);margin-bottom:20px;">
+        El profesor te ha retirado de esta sesión de clase.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button type="button" id="btnKickedChooseSession" class="btn btn-primary" style="justify-content:center;">
+          📚 Elegir otra sesión
+        </button>
+        <button type="button" id="btnKickedReload" class="btn btn-secondary" style="justify-content:center;">
+          🔄 Recargar página
         </button>
       </div>
     </div>

@@ -3207,6 +3207,52 @@ body.mode-easy .form-group textarea {
 
 .board-grid--compact .card:not(.card-focused):not(.card-expanded) .card-header {
   padding: 10px 12px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.board-grid--compact .card:not(.card-focused):not(.card-expanded) .card-author-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.board-grid--compact .card:not(.card-focused):not(.card-expanded) .author-meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-grid--compact .card:not(.card-focused):not(.card-expanded) .author-name {
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.board-grid--compact .card:not(.card-focused):not(.card-expanded) .post-time {
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+
+.board-grid--compact .card:not(.card-focused):not(.card-expanded) .card-owner-actions {
+  display: none !important;
+}
+
+.board-grid--compact .card:not(.card-focused):not(.card-expanded):hover .card-owner-actions {
+  display: flex !important;
+  gap: 2px;
 }
 
 .board-grid--compact .card:not(.card-focused):not(.card-expanded) .avatar {
@@ -3214,6 +3260,7 @@ body.mode-easy .form-group textarea {
   height: 28px;
   font-size: 0.72rem;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .board-grid--compact .card:not(.card-focused):not(.card-expanded) .card-body {
@@ -3297,7 +3344,10 @@ body.mode-easy .form-group textarea {
   line-height: 1.62;
   display: block;
   -webkit-line-clamp: unset;
-  overflow: visible;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 6px;
+  word-break: break-word;
 }
 
 .board-grid .card.card-focused .card-image-wrap img {
@@ -3845,8 +3895,9 @@ body.mode-easy .form-group textarea {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 540px;
+  max-height: 320px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .queue-empty {
@@ -6692,6 +6743,64 @@ body.role-teacher .student-only {
   font-weight: 600;
   margin-bottom: 14px;
 }
+
+/* --- Teacher Students & Participants Management Tab --- */
+.teacher-student-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: all 0.15s ease;
+}
+
+.teacher-student-item:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.teacher-student-item.is-disabled {
+  background: rgba(239, 68, 68, 0.04);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.teacher-student-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.teacher-student-name {
+  font-size: 0.90rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.teacher-student-meta {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.teacher-student-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 
 
 

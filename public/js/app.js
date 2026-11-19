@@ -91,15 +91,15 @@
     if (isNaN(date.getTime())) return '';
     const now = typeof serverNow === 'function' ? serverNow() : Date.now();
     const diffSec = Math.max(0, Math.floor((now - date.getTime()) / 1000));
-    if (diffSec < 15) return 'ahora';
+    if (diffSec < 20) return 'ahora';
     if (diffSec < 60) return `hace ${diffSec}s`;
     const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `hace ${diffMin}m`;
+    if (diffMin < 60) return `hace ${diffMin} min`;
     const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `hace ${diffHr}h`;
+    if (diffHr < 24) return `hace ${diffHr} h`;
     const diffDays = Math.floor(diffHr / 24);
-    if (diffDays === 1) return 'hace 1d';
-    if (diffDays < 7) return `hace ${diffDays}d`;
+    if (diffDays === 1) return 'ayer';
+    if (diffDays < 7) return `hace ${diffDays} d`;
     return date.toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short',
@@ -294,6 +294,10 @@
     teacherToken: sessionStorage.getItem(STORAGE_TEACHER_TOKEN_KEY) || '',
     teacherName,
     isTeacher: false,
+    isDisabled: false,
+    isKicked: false,
+    studentsList: [],
+    studentsSearchQuery: '',
     activeTeacherTab: 'assignment',
 
     activeTopic: '__ALL__', // '__ALL__' | '__LIVE__' | '__UNREVIEWED__' | '__REVIEWED__' | topic string
@@ -773,6 +777,20 @@
     tunnelErrorBox: document.getElementById('tunnelErrorBox'),
     btnToggleTunnel: document.getElementById('btnToggleTunnel'),
 
+    // Student Management (Expulsar / Deshabilitar)
+    menuItemTeacherStudents: document.getElementById('menuItemTeacherStudents'),
+    btnRefreshStudentsList: document.getElementById('btnRefreshStudentsList'),
+    inputSearchStudents: document.getElementById('inputSearchStudents'),
+    teacherStudentsList: document.getElementById('teacherStudentsList'),
+    studentDisabledBanner: document.getElementById('studentDisabledBanner'),
+    studentKickedModal: document.getElementById('studentKickedModal'),
+    studentKickedReason: document.getElementById('studentKickedReason'),
+    btnKickedChooseSession: document.getElementById('btnKickedChooseSession'),
+    btnKickedReload: document.getElementById('btnKickedReload'),
+    postDetailTeacherActions: document.getElementById('postDetailTeacherActions'),
+    btnDetailToggleDisable: document.getElementById('btnDetailToggleDisable'),
+    btnDetailKick: document.getElementById('btnDetailKick'),
+
     toastContainer: document.getElementById('toastContainer'),
   };
 
@@ -1009,6 +1027,9 @@
     }
     if (tabName === 'assignment') {
       updateAssignmentFormHeaderUI();
+    }
+    if (tabName === 'students') {
+      loadTeacherStudents();
     }
   }
 
@@ -1327,6 +1348,11 @@
   el.menuItemTeacherSessions?.addEventListener('click', () => {
     closeActionMenus();
     openTeacherPanel('sessions');
+  });
+
+  el.menuItemTeacherStudents?.addEventListener('click', () => {
+    closeActionMenus();
+    openTeacherPanel('students');
   });
 
   el.menuItemTeacherScreens?.addEventListener('click', () => {
@@ -3321,6 +3347,188 @@
     });
   });
 
+  // --- Teacher Students & Participants Management (Expulsar / Deshabilitar) ---
+  function loadTeacherStudents() {
+    if (!state.isTeacher) return;
+    socket.emit(
+      'teacher:students:list',
+      {
+        teacherToken: state.teacherToken,
+        sessionId: state.activeSessionId,
+      },
+      (res) => {
+        if (!res?.ok) {
+          if (el.teacherStudentsList) {
+            el.teacherStudentsList.innerHTML = `<div class="muted-note" style="text-align:center;padding:24px;color:var(--danger,#ef4444);">${escapeHtml(
+              res?.error || 'No se pudo cargar la lista de alumnos.'
+            )}</div>`;
+          }
+          return;
+        }
+        state.studentsList = Array.isArray(res.students) ? res.students : [];
+        renderTeacherStudentsList();
+      }
+    );
+  }
+
+  function renderTeacherStudentsList() {
+    if (!el.teacherStudentsList) return;
+    const q = (state.studentsSearchQuery || '').trim().toLowerCase();
+    const students = (state.studentsList || []).filter((s) => {
+      if (!q) return true;
+      return (s.name || '').toLowerCase().includes(q);
+    });
+
+    if (students.length === 0) {
+      el.teacherStudentsList.innerHTML = `
+        <div class="muted-note" style="text-align:center;padding:32px;color:var(--text-muted);">
+          ${
+            q
+              ? `No se encontraron participantes que coincidan con "${escapeHtml(state.studentsSearchQuery)}".`
+              : 'No hay participantes registrados en esta sesión aún.'
+          }
+        </div>
+      `;
+      return;
+    }
+
+    el.teacherStudentsList.innerHTML = students
+      .map((s) => {
+        const isMe = s.authorId === authorId;
+        const isOnline = Boolean(s.isOnline);
+        const isDisabled = Boolean(s.isDisabled);
+        const isTeacher = Boolean(s.isTeacher);
+        const postsCount = s.postsCount || 0;
+
+        return `
+        <div class="teacher-student-item ${isDisabled ? 'is-disabled' : ''}" data-student-id="${escapeHtml(
+          s.authorId || ''
+        )}" data-student-name="${escapeHtml(s.name)}">
+          <div class="teacher-student-info">
+            <div class="avatar" style="background:${getAvatarColor(s.authorId || s.name)}">${escapeHtml(
+              getInitials(s.name)
+            )}</div>
+            <div style="min-width:0;flex:1;">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span class="teacher-student-name">${escapeHtml(s.name)}</span>
+                ${isMe ? '<span class="you-tag">Tú</span>' : ''}
+                ${
+                  isTeacher
+                    ? '<span class="badge" style="background:#4f46e5;color:#fff;font-size:0.68rem;padding:1px 6px;border-radius:4px;">🎓 Docente</span>'
+                    : '<span class="badge" style="background:#94a3b8;color:#fff;font-size:0.68rem;padding:1px 6px;border-radius:4px;">🎒 Alumno</span>'
+                }
+                ${
+                  isOnline
+                    ? '<span style="font-size:0.68rem;color:#16a34a;font-weight:600;">🟢 En línea</span>'
+                    : '<span style="font-size:0.68rem;color:var(--text-muted);">⚪ Desconectado</span>'
+                }
+                ${
+                  isDisabled
+                    ? '<span class="hidden-tag" style="font-size:0.68rem;padding:1px 6px;">🚫 Deshabilitado</span>'
+                    : ''
+                }
+              </div>
+              <div class="teacher-student-meta">
+                <span>📝 ${postsCount} ${postsCount === 1 ? 'padlet' : 'padlets'}</span>
+                ${isDisabled && s.disabledAt ? `<span>· Deshabilitado ${formatRelativeTime(s.disabledAt)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="teacher-student-actions">
+            ${
+              !isTeacher
+                ? `
+              <button type="button" class="btn btn-sm btn-secondary" data-student-action="toggle-disable" data-student-id="${escapeHtml(
+                s.authorId || ''
+              )}" data-student-name="${escapeHtml(s.name)}" title="${
+                    isDisabled ? 'Habilitar nuevamente a este alumno' : 'Deshabilitar al alumno (modo solo lectura)'
+                  }">
+                ${isDisabled ? '✅ Habilitar' : '🚫 Deshabilitar'}
+              </button>
+              <button type="button" class="btn btn-sm btn-danger" data-student-action="kick" data-student-id="${escapeHtml(
+                s.authorId || ''
+              )}" data-student-name="${escapeHtml(s.name)}" title="Expulsar al alumno de la clase">
+                👢 Expulsar
+              </button>
+            `
+                : ''
+            }
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+  }
+
+  if (el.teacherStudentsList) {
+    el.teacherStudentsList.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-student-action]');
+      if (!btn) return;
+      const action = btn.dataset.studentAction;
+      const sId = btn.dataset.studentId;
+      const sName = btn.dataset.studentName;
+
+      if (action === 'toggle-disable') {
+        socket.emit(
+          'teacher:student:toggle-disable',
+          {
+            teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
+            authorId: sId,
+            authorName: sName,
+          },
+          (res) => {
+            if (!res?.ok) {
+              showToast(res?.error || 'No se pudo cambiar estado del alumno', 'error');
+            } else {
+              showToast(
+                res.disabled
+                  ? `🚫 ${sName} ha sido deshabilitado (modo solo lectura)`
+                  : `✅ ${sName} ha sido habilitado nuevamente`,
+                res.disabled ? 'info' : 'success'
+              );
+              loadTeacherStudents();
+            }
+          }
+        );
+      } else if (action === 'kick') {
+        if (!window.confirm(`¿Expulsar a "${sName}" de la sesión de clase actual?`)) return;
+        socket.emit(
+          'teacher:student:kick',
+          {
+            teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
+            authorId: sId,
+            authorName: sName,
+            reason: 'Expulsado de la clase por el profesor.',
+          },
+          (res) => {
+            if (!res?.ok) {
+              showToast(res?.error || 'No se pudo expulsar al alumno', 'error');
+            } else {
+              showToast(`👢 ${sName} ha sido expulsado de la clase`, 'success');
+              loadTeacherStudents();
+            }
+          }
+        );
+      }
+    });
+  }
+
+  if (el.btnRefreshStudentsList) {
+    el.btnRefreshStudentsList.addEventListener('click', () => {
+      loadTeacherStudents();
+      showToast('Lista de participantes actualizada');
+    });
+  }
+
+  if (el.inputSearchStudents) {
+    el.inputSearchStudents.addEventListener('input', (e) => {
+      state.studentsSearchQuery = e.target.value;
+      renderTeacherStudentsList();
+    });
+  }
+
   function applySessionSnapshot(data, { isSessionChange = false } = {}) {
     if (data.socketId) state.socketId = data.socketId;
     if (data.serverTime) {
@@ -3482,6 +3690,66 @@
   socket.on('tunnel:status', (status) => {
     updateTunnelUI(status);
   });
+
+  socket.on('student:kicked', ({ reason, sessionName }) => {
+    state.isKicked = true;
+    if (el.studentKickedReason) {
+      el.studentKickedReason.innerHTML = `<strong>${escapeHtml(
+        reason || 'Has sido expulsado de la clase por el profesor.'
+      )}</strong>${
+        sessionName
+          ? `<br/><small style="color:var(--text-muted);display:block;margin-top:6px;">Sesión: ${escapeHtml(
+              sessionName
+            )}</small>`
+          : ''
+      }`;
+    }
+    openModal(el.studentKickedModal);
+    playChime('recess');
+  });
+
+  socket.on('student:disabled-status', ({ disabled, reason }) => {
+    state.isDisabled = Boolean(disabled);
+    if (el.studentDisabledBanner) {
+      el.studentDisabledBanner.classList.toggle('hidden', !state.isDisabled);
+    }
+    if (state.isDisabled) {
+      playChime('recess');
+      showToast(reason || '🚫 Tu cuenta ha sido deshabilitada por el docente (modo solo lectura)', 'error');
+    } else {
+      showToast('✅ Tu cuenta ha sido habilitada nuevamente por el profesor', 'success');
+    }
+  });
+
+  socket.on('session:author-disabled', ({ authorId: targetId, authorName: targetName, disabled }) => {
+    const isMe =
+      targetId === authorId ||
+      (targetName && authorName && targetName.trim().toLowerCase() === authorName.trim().toLowerCase());
+    if (isMe) {
+      state.isDisabled = Boolean(disabled);
+      if (el.studentDisabledBanner) {
+        el.studentDisabledBanner.classList.toggle('hidden', !state.isDisabled);
+      }
+    }
+    if (state.isTeacher && state.activeTeacherTab === 'students') {
+      loadTeacherStudents();
+    }
+  });
+
+  if (el.btnKickedChooseSession) {
+    el.btnKickedChooseSession.addEventListener('click', () => {
+      closeModal(el.studentKickedModal);
+      state.activeSessionId = null;
+      sessionStorage.removeItem(STORAGE_ACTIVE_SESSION_KEY);
+      openSessionPicker({ required: true });
+    });
+  }
+
+  if (el.btnKickedReload) {
+    el.btnKickedReload.addEventListener('click', () => {
+      window.location.reload();
+    });
+  }
 
   socket.on('assignment:updated', ({ assignment, assignmentHistory }) => {
     state.assignment = assignment || null;
@@ -4230,11 +4498,17 @@
       post.highlighted ? 'Quitar destacado' : 'Destacar esta respuesta (⭐)'
     }" aria-label="Destacar tarjeta">${post.highlighted ? '⭐' : '☆'}</button>`;
 
+    const teacherStudentControls = state.isTeacher && !post.authorIsTeacher
+      ? `<button type="button" class="icon-btn-subtle" data-action="toggle-disable-author" data-author-id="${escapeHtml(post.authorId || '')}" data-author-name="${escapeHtml(post.author)}" title="Deshabilitar/Habilitar a ${escapeHtml(post.author)}">🚫</button>
+         <button type="button" class="icon-btn-subtle" data-action="kick-author" data-author-id="${escapeHtml(post.authorId || '')}" data-author-name="${escapeHtml(post.author)}" title="Expulsar a ${escapeHtml(post.author)} de la clase">👢</button>`
+      : '';
+
     const ownerButtons = canManage
       ? `
         <div class="card-owner-actions">
           ${pinButton}
           ${hideButton}
+          ${teacherStudentControls}
           <button type="button" class="icon-btn-subtle" data-action="edit-post" title="Editar tarjeta" aria-label="Editar tarjeta">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 20h9" />
@@ -4298,7 +4572,7 @@
               ${escapeHtml(post.author)}
               ${isOwner ? '<span class="you-tag">Tú</span>' : ''}
             </div>
-            <div class="post-time">${formatRelativeTime(post.createdAt)}${post.updatedAt ? ' · editado' : ''}</div>
+            <div class="post-time" title="${new Date(post.createdAt).toLocaleString('es-ES')}${post.updatedAt ? ' · editado ' + new Date(post.updatedAt).toLocaleString('es-ES') : ''}">${formatRelativeTime(post.createdAt)}${post.updatedAt ? ' ✏️' : ''}</div>
           </div>
         </div>
         <div class="card-owner-actions">
@@ -4644,6 +4918,22 @@
       }
     }
 
+    if (el.postDetailTeacherActions) {
+      const showTeacherActions = state.isTeacher && !post.authorIsTeacher;
+      el.postDetailTeacherActions.classList.toggle('hidden', !showTeacherActions);
+      if (showTeacherActions) {
+        const isDis = (state.studentsList || []).some(
+          (s) =>
+            ((s.authorId && s.authorId === post.authorId) ||
+              s.name.toLowerCase() === (post.author || '').toLowerCase()) &&
+            s.isDisabled
+        );
+        if (el.btnDetailToggleDisable) {
+          el.btnDetailToggleDisable.textContent = isDis ? '✅ Habilitar alumno' : '🚫 Deshabilitar alumno';
+        }
+      }
+    }
+
     openModal(el.postDetailModal);
   }
 
@@ -4710,6 +5000,63 @@
     a.click();
     document.body.removeChild(a);
     showToast('🖼️ Descargando imagen adjunta...', 'info');
+  });
+
+  el.btnDetailToggleDisable?.addEventListener('click', () => {
+    if (!activeDetailPost) return;
+    const authorId = activeDetailPost.authorId;
+    const authorName = activeDetailPost.author;
+    socket.emit(
+      'teacher:student:toggle-disable',
+      {
+        teacherToken: state.teacherToken,
+        sessionId: state.activeSessionId,
+        authorId,
+        authorName,
+      },
+      (res) => {
+        if (!res?.ok) {
+          showToast(res?.error || 'No se pudo cambiar estado del alumno', 'error');
+        } else {
+          showToast(
+            res.disabled
+              ? `🚫 ${authorName} ha sido deshabilitado (modo solo lectura)`
+              : `✅ ${authorName} ha sido habilitado nuevamente`,
+            res.disabled ? 'info' : 'success'
+          );
+          if (el.btnDetailToggleDisable) {
+            el.btnDetailToggleDisable.textContent = res.disabled ? '✅ Habilitar alumno' : '🚫 Deshabilitar';
+          }
+          loadTeacherStudents();
+        }
+      }
+    );
+  });
+
+  el.btnDetailKick?.addEventListener('click', () => {
+    if (!activeDetailPost) return;
+    const authorId = activeDetailPost.authorId;
+    const authorName = activeDetailPost.author;
+    if (!window.confirm(`¿Expulsar a "${authorName}" de la sesión de clase actual?`)) return;
+    socket.emit(
+      'teacher:student:kick',
+      {
+        teacherToken: state.teacherToken,
+        sessionId: state.activeSessionId,
+        authorId,
+        authorName,
+        reason: 'Expulsado de la clase por el profesor.',
+      },
+      (res) => {
+        if (!res?.ok) {
+          showToast(res?.error || 'No se pudo expulsar al alumno', 'error');
+        } else {
+          showToast(`👢 ${authorName} ha sido expulsado de la clase`, 'success');
+          closeModal(el.postDetailModal);
+          loadTeacherStudents();
+        }
+      }
+    );
   });
 
   // --- Event Delegation on Padlets Grid AND Screens Grid ---
@@ -4780,6 +5127,53 @@
         (res) => {
           if (!res?.ok) showToast(res?.error || 'No se pudo despublicar/republicar la tarjeta', 'error');
           else showToast(res.post?.isHidden ? '🚫 Tarjeta despublicada para los alumnos' : '👁️ Tarjeta republicada y visible para alumnos', 'info');
+        }
+      );
+    } else if (action === 'toggle-disable-author') {
+      const aId = actionEl.dataset.authorId;
+      const aName = actionEl.dataset.authorName;
+      socket.emit(
+        'teacher:student:toggle-disable',
+        {
+          teacherToken: state.teacherToken,
+          sessionId: state.activeSessionId,
+          authorId: aId,
+          authorName: aName,
+        },
+        (res) => {
+          if (!res?.ok) {
+            showToast(res?.error || 'No se pudo cambiar estado del alumno', 'error');
+          } else {
+            showToast(
+              res.disabled
+                ? `🚫 ${aName} ha sido deshabilitado (modo solo lectura)`
+                : `✅ ${aName} ha sido habilitado nuevamente`,
+              res.disabled ? 'info' : 'success'
+            );
+            loadTeacherStudents();
+          }
+        }
+      );
+    } else if (action === 'kick-author') {
+      const aId = actionEl.dataset.authorId;
+      const aName = actionEl.dataset.authorName;
+      if (!window.confirm(`¿Expulsar a "${aName}" de la sesión de clase actual?`)) return;
+      socket.emit(
+        'teacher:student:kick',
+        {
+          teacherToken: state.teacherToken,
+          sessionId: state.activeSessionId,
+          authorId: aId,
+          authorName: aName,
+          reason: 'Expulsado de la clase por el profesor.',
+        },
+        (res) => {
+          if (!res?.ok) {
+            showToast(res?.error || 'No se pudo expulsar al alumno', 'error');
+          } else {
+            showToast(`👢 ${aName} ha sido expulsado de la clase`, 'success');
+            loadTeacherStudents();
+          }
         }
       );
     } else if (action === 'review-post') {
@@ -5096,6 +5490,10 @@
 
   // --- Simple Screen Share / Queue Modal (ONLY Name & Reason) ---
   function openScreenShareModal() {
+    if (state.isDisabled) {
+      showToast('🚫 Tu cuenta está deshabilitada por el profesor para compartir pantalla.', 'error');
+      return;
+    }
     if (state.sessionStatus?.isClosed && !state.isTeacher) {
       showToast('🔒 Esta sesión está cerrada por el profesor (solo lectura).', 'error');
       return;
@@ -5389,6 +5787,10 @@
   }
 
   function openComposerForCreate() {
+    if (state.isDisabled) {
+      showToast('🚫 Tu cuenta está deshabilitada por el profesor (solo lectura).', 'error');
+      return;
+    }
     if (state.sessionStatus?.isClosed && !state.isTeacher) {
       showToast('🔒 Esta sesión está cerrada por el profesor (solo lectura).', 'error');
       return;
@@ -5403,6 +5805,10 @@
   }
 
   function openComposerForEdit(post) {
+    if (state.isDisabled) {
+      showToast('🚫 Tu cuenta está deshabilitada por el profesor para editar.', 'error');
+      return;
+    }
     if (state.sessionStatus?.isClosed && !state.isTeacher) {
       showToast('🔒 Esta sesión está cerrada por el profesor (solo lectura).', 'error');
       return;

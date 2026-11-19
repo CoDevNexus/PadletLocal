@@ -1671,6 +1671,9 @@ io.on('connection', (socket) => {
   socket.on('post:create', (payload, ack) => {
     try {
       const session = assertSessionWritable(socket, payload?.teacherToken, payload?.sessionId);
+      if (store.isAuthorDisabled(payload?.authorId, payload?.author, session.id)) {
+        throw new Error('Tu cuenta está deshabilitada por el profesor. Solo puedes observar la clase.');
+      }
       const post = store.createPost(payload || {}, session.id);
       const enriched = enrichPost(post);
       emitPostToRoom(session.id, 'post:created', post);
@@ -1685,6 +1688,10 @@ io.on('connection', (socket) => {
     try {
       const { id, teacherToken, sessionId, ...fields } = payload || {};
       const session = assertSessionWritable(socket, teacherToken, sessionId);
+      const isTeacher = isValidTeacherToken(teacherToken);
+      if (!isTeacher && store.isAuthorDisabled(fields?.authorId, null, session.id)) {
+        throw new Error('Tu cuenta está deshabilitada por el profesor para editar publicaciones.');
+      }
       const post = store.updatePost(
         id,
         {
@@ -1740,6 +1747,9 @@ io.on('connection', (socket) => {
     try {
       const session = assertSessionWritable(socket, payload?.teacherToken, payload?.sessionId);
       const { id, authorId, author, text } = payload || {};
+      if (store.isAuthorDisabled(authorId, author, session.id)) {
+        throw new Error('Tu cuenta está deshabilitada por el profesor para comentar.');
+      }
       const post = store.addComment(id, { authorId, author, text }, session.id);
       const enriched = enrichPost(post);
       emitPostToRoom(session.id, 'post:updated', post);
@@ -2140,6 +2150,162 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- Teacher Student Management: Kick & Disable ---
+  socket.on('teacher:students:list', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket, payload?.sessionId);
+      const participants = store.getParticipatingStudents(session.id);
+      const onlineUsers = getSessionOnlineUsers(session.id);
+
+      // Merge online status
+      const onlineMap = new Map();
+      onlineUsers.forEach((u) => {
+        onlineMap.set(u.authorId || u.name.toLowerCase(), u);
+      });
+
+      const students = participants.map((p) => {
+        const key = p.authorId || p.name.toLowerCase();
+        const onlineInfo = onlineMap.get(key) || (p.authorId ? onlineMap.get(p.authorId) : null);
+        return {
+          ...p,
+          isOnline: Boolean(onlineInfo),
+          socketId: onlineInfo?.socketId || null,
+        };
+      });
+
+      // Add any connected online users that aren't yet in participants
+      onlineUsers.forEach((u) => {
+        const exists = students.some(
+          (s) =>
+            (s.authorId && u.authorId && s.authorId === u.authorId) ||
+            s.name.toLowerCase() === u.name.toLowerCase()
+        );
+        if (!exists) {
+          students.push({
+            authorId: u.authorId,
+            name: u.name,
+            isTeacher: Boolean(u.isTeacher),
+            postsCount: 0,
+            isDisabled: store.isAuthorDisabled(u.authorId, u.name, session.id),
+            isOnline: true,
+            socketId: u.socketId,
+          });
+        }
+      });
+
+      if (typeof ack === 'function') {
+        ack({
+          ok: true,
+          students,
+          disabledAuthors: store.getDisabledAuthors(session.id),
+        });
+      }
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:student:toggle-disable', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket, payload?.sessionId);
+      const { authorId, authorName, disabled } = payload || {};
+      const res = store.toggleDisableAuthor(
+        authorId,
+        authorName,
+        {
+          disabledBy: socket.data.teacherName || 'Profesor',
+          disabled,
+        },
+        session.id
+      );
+
+      // Notify the student's sockets in this session
+      for (const sock of getRoomSockets(session.id)) {
+        const client = connectedClients.get(sock.id);
+        const matchesId = authorId && (sock.data.authorId === authorId || client?.authorId === authorId);
+        const matchesName =
+          authorName && client?.name && client.name.trim().toLowerCase() === authorName.trim().toLowerCase();
+        if (matchesId || matchesName) {
+          sock.emit('student:disabled-status', {
+            disabled: res.disabled,
+            reason: res.disabled
+              ? 'El docente ha deshabilitado tu cuenta temporalmente para publicar o comentar.'
+              : null,
+          });
+        }
+      }
+
+      io.to(sessionRoom(session.id)).emit('session:author-disabled', {
+        authorId: res.authorId,
+        authorName: res.authorName,
+        disabled: res.disabled,
+      });
+
+      if (typeof ack === 'function') ack({ ok: true, ...res });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:student:kick', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket, payload?.sessionId);
+      const { authorId, authorName, reason } = payload || {};
+      const kickReason = reason || 'Has sido expulsado de la clase por el profesor.';
+
+      // Clean active screen share
+      for (const [postId, share] of activeShares.entries()) {
+        if (share.sessionId === session.id) {
+          const matches =
+            (authorId && share.sharerAuthorId === authorId) ||
+            (authorName && share.sharerName?.toLowerCase() === authorName.toLowerCase());
+          if (matches) {
+            stopScreenShare(postId, 'kicked');
+          }
+        }
+      }
+
+      // Clean from screen queue
+      const queue = getSessionQueue(session.id);
+      const nextQueue = queue.filter((q) => {
+        if (authorId && q.authorId === authorId) return false;
+        if (authorName && q.author?.toLowerCase() === authorName.toLowerCase()) return false;
+        return true;
+      });
+      sessionScreenQueues.set(session.id, nextQueue);
+      broadcastScreenQueue(session.id);
+
+      // Kick matching sockets
+      let kickedCount = 0;
+      for (const sock of getRoomSockets(session.id)) {
+        if (sock.data.isTeacher) continue;
+        const client = connectedClients.get(sock.id);
+        const matchesId = authorId && (sock.data.authorId === authorId || client?.authorId === authorId);
+        const matchesName =
+          authorName && client?.name && client.name.trim().toLowerCase() === authorName.trim().toLowerCase();
+
+        if (matchesId || matchesName) {
+          sock.emit('student:kicked', {
+            reason: kickReason,
+            sessionId: session.id,
+            sessionName: session.name,
+          });
+          sock.leave(sessionRoom(session.id));
+          connectedClients.delete(sock.id);
+          kickedCount++;
+        }
+      }
+
+      broadcastPresence(session.id);
+      if (typeof ack === 'function') ack({ ok: true, kickedCount });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
   socket.on('teacher:notify', (payload, ack) => {
     try {
       requireTeacher(payload?.teacherToken);
@@ -2311,6 +2477,10 @@ io.on('connection', (socket) => {
       if (!cleanAuthor) throw new Error('Ingresa tu nombre para encolarte.');
       if (!cleanReason) throw new Error('Ingresa el motivo para compartir tu pantalla.');
 
+      if (store.isAuthorDisabled(cleanAuthorId, cleanAuthor, session.id)) {
+        throw new Error('Tu cuenta está deshabilitada por el profesor para compartir pantalla.');
+      }
+
       const audience = ['all', 'teacher', 'custom'].includes(payload?.audience) ? payload.audience : 'all';
       const targetAuthorIds = Array.isArray(payload?.targetAuthorIds) ? payload.targetAuthorIds.map(String).slice(0, 50) : [];
 
@@ -2431,6 +2601,10 @@ io.on('connection', (socket) => {
       const { postId, authorId, authorName, sourceType, audience = 'all', targetAuthorIds = [] } = payload || {};
       const post = store.getPostById(postId, session.id);
       if (!post) throw new Error('La tarjeta no existe en esta sesión.');
+
+      if (store.isAuthorDisabled(authorId || post.authorId, authorName || post.author, session.id)) {
+        throw new Error('Tu cuenta está deshabilitada por el profesor para compartir pantalla.');
+      }
 
       const existing = activeShares.get(postId);
       if (existing && existing.sharerSocketId !== socket.id) {
@@ -2592,6 +2766,10 @@ io.on('connection', (socket) => {
       const clientInfo = connectedClients.get(socket.id);
       const fromName = clientInfo?.name || (isTeacher ? 'Docente' : 'Alumno');
       const fromRole = isTeacher ? 'teacher' : 'student';
+
+      if (!isTeacher && store.isAuthorDisabled(authorId, fromName, sid)) {
+        throw new Error('Tu cuenta está deshabilitada por el profesor para enviar mensajes.');
+      }
 
       const to = String(payload?.to || 'all').trim();
       const targetAuthorId = to.startsWith('user:') ? to.slice(5) : to;
