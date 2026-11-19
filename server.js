@@ -2040,6 +2040,7 @@ io.on('connection', (socket) => {
           imageUrl: payload.imageUrl,
           imageName: payload.imageName,
           isHidden: payload.isHidden,
+          pinned: payload.pinned,
           author: payload.author || 'Profesor',
         },
         session.id

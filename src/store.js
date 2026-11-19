@@ -896,22 +896,28 @@ class BoardStore {
 
   updateAssignment(
     id,
-    { title, instructions, dueNote, imageUrl, imageName, isHidden, author = 'Profesor' },
+    { title, instructions, dueNote, imageUrl, imageName, isHidden, pinned, author = 'Profesor' },
     sessionId = null
   ) {
     const session = this.resolveSession(sessionId);
+    const cleanId = String(id || '').trim();
     let target = null;
     let isCurrent = false;
 
-    if (session.assignment && session.assignment.id === id) {
+    if (session.assignment && String(session.assignment.id).trim() === cleanId) {
       target = session.assignment;
       isCurrent = true;
-    } else {
-      target = session.assignmentHistory.find((h) => h.id === id);
+    } else if (Array.isArray(session.assignmentHistory)) {
+      target = session.assignmentHistory.find((h) => String(h.id).trim() === cleanId);
     }
 
     if (!target) {
-      throw new Error('Tarea no encontrada en esta sesión.');
+      if (session.assignment) {
+        target = session.assignment;
+        isCurrent = true;
+      } else {
+        throw new Error('Tarea no encontrada en esta sesión.');
+      }
     }
 
     if (typeof title === 'string') {
@@ -920,7 +926,7 @@ class BoardStore {
       target.title = cleanTitle;
       // Also update linked posts assignmentTitle
       session.posts.forEach((p) => {
-        if (p.assignmentId === id) p.assignmentTitle = cleanTitle;
+        if (p.assignmentId === target.id) p.assignmentTitle = cleanTitle;
       });
     }
 
@@ -941,8 +947,22 @@ class BoardStore {
       target.isHidden = Boolean(isHidden);
     }
 
+    if (pinned !== undefined) {
+      target.pinned = Boolean(pinned);
+    }
+
     target.updatedBy = String(author || 'Profesor').trim().slice(0, 50);
     target.updatedAt = new Date().toISOString();
+
+    // Sync active assignment and history if same ID exists in both
+    if (session.assignment && String(session.assignment.id).trim() === String(target.id).trim()) {
+      session.assignment = { ...session.assignment, ...target };
+    }
+    if (Array.isArray(session.assignmentHistory)) {
+      session.assignmentHistory = session.assignmentHistory.map((h) =>
+        String(h.id).trim() === String(target.id).trim() ? { ...h, ...target } : h
+      );
+    }
 
     this.save();
     return {
@@ -959,31 +979,47 @@ class BoardStore {
     sessionId = null
   ) {
     const session = this.resolveSession(sessionId);
+    const cleanId = String(id || '').trim();
     let target = null;
     let isCurrent = false;
 
-    if (session.assignment && session.assignment.id === id) {
+    if (session.assignment && String(session.assignment.id).trim() === cleanId) {
       target = session.assignment;
       isCurrent = true;
-    } else {
-      target = session.assignmentHistory.find((h) => h.id === id);
+    } else if (Array.isArray(session.assignmentHistory)) {
+      target = session.assignmentHistory.find((h) => String(h.id).trim() === cleanId);
     }
 
     if (!target) {
-      throw new Error('Tarea no encontrada en esta sesión.');
+      if (session.assignment) {
+        target = session.assignment;
+        isCurrent = true;
+      } else {
+        throw new Error('Tarea no encontrada en esta sesión.');
+      }
     }
 
     target.isHidden = !target.isHidden;
     target.updatedAt = new Date().toISOString();
 
+    if (session.assignment && String(session.assignment.id).trim() === String(target.id).trim()) {
+      session.assignment.isHidden = target.isHidden;
+      session.assignment.updatedAt = target.updatedAt;
+    }
+    if (Array.isArray(session.assignmentHistory)) {
+      session.assignmentHistory = session.assignmentHistory.map((h) =>
+        String(h.id).trim() === String(target.id).trim() ? { ...h, isHidden: target.isHidden, updatedAt: target.updatedAt } : h
+      );
+    }
+
     let affectedPostsCount = 0;
     if (deleteLinkedPosts) {
       const beforeCount = session.posts.length;
-      session.posts = session.posts.filter((p) => p.assignmentId !== id);
+      session.posts = session.posts.filter((p) => p.assignmentId !== target.id);
       affectedPostsCount = beforeCount - session.posts.length;
     } else if (hideLinkedPosts) {
       session.posts.forEach((p) => {
-        if (p.assignmentId === id) {
+        if (p.assignmentId === target.id) {
           p.isHidden = target.isHidden;
           if (target.isHidden) {
             p.hiddenAt = new Date().toISOString();
@@ -1013,17 +1049,19 @@ class BoardStore {
     sessionId = null
   ) {
     const session = this.resolveSession(sessionId);
+    let cleanId = String(id || '').trim();
     let deleted = false;
     let isCurrent = false;
 
-    if (session.assignment && session.assignment.id === id) {
+    if (session.assignment && (!cleanId || String(session.assignment.id).trim() === cleanId)) {
+      cleanId = String(session.assignment.id).trim();
       session.assignment = null;
       deleted = true;
       isCurrent = true;
     }
 
     const prevHistoryLen = session.assignmentHistory.length;
-    session.assignmentHistory = session.assignmentHistory.filter((h) => h.id !== id);
+    session.assignmentHistory = session.assignmentHistory.filter((h) => String(h.id).trim() !== cleanId);
     if (session.assignmentHistory.length < prevHistoryLen) {
       deleted = true;
     }
@@ -1035,11 +1073,11 @@ class BoardStore {
     let affectedPostsCount = 0;
     if (deleteLinkedPosts) {
       const beforeCount = session.posts.length;
-      session.posts = session.posts.filter((p) => p.assignmentId !== id);
+      session.posts = session.posts.filter((p) => p.assignmentId !== cleanId);
       affectedPostsCount = beforeCount - session.posts.length;
     } else if (hideLinkedPosts) {
       session.posts.forEach((p) => {
-        if (p.assignmentId === id) {
+        if (p.assignmentId === cleanId) {
           p.isHidden = true;
           p.hiddenAt = new Date().toISOString();
           p.hiddenBy = 'Profesor (Tarea eliminada)';
@@ -1052,6 +1090,7 @@ class BoardStore {
     return {
       assignment: session.assignment,
       assignmentHistory: session.assignmentHistory,
+      deletedId: cleanId,
       affectedPostsCount,
       isCurrent,
     };

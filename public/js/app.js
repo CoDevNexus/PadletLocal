@@ -433,9 +433,11 @@
     // Teacher Login input for teacher name
     inputTeacherName: document.getElementById('inputTeacherName'),
 
-    // Topbar Chat Button & Badge
+    // Topbar & Floating Chat Buttons & Badges
     btnOpenChat: document.getElementById('btnOpenChat'),
     chatUnreadBadge: document.getElementById('chatUnreadBadge'),
+    fabChat: document.getElementById('fabChat'),
+    fabChatBadge: document.getElementById('fabChatBadge'),
 
     // Live Session Chat Drawer Elements
     chatDrawerBackdrop: document.getElementById('chatDrawerBackdrop'),
@@ -537,6 +539,10 @@
     assignmentImage: document.getElementById('assignmentImage'),
     btnCopyAssignment: document.getElementById('btnCopyAssignment'),
     btnRespondAssignment: document.getElementById('btnRespondAssignment'),
+    expandedTaskTeacherActions: document.getElementById('expandedTaskTeacherActions'),
+    btnEditExpandedTask: document.getElementById('btnEditExpandedTask'),
+    btnToggleHideExpandedTask: document.getElementById('btnToggleHideExpandedTask'),
+    btnDeleteExpandedTask: document.getElementById('btnDeleteExpandedTask'),
 
     // Workspace Tabs (Padlets vs Pantallas y Cola)
     workspaceTabs: document.getElementById('workspaceTabs'),
@@ -1481,11 +1487,19 @@
   // --- Compact Click-to-Grow Tasks ("Temas de Tareas") ---
   function getAllDisplayTasks() {
     const items = [];
-    if (state.assignment && state.assignment.pinned) {
-      items.push({ ...state.assignment, isActive: true });
+    const isTeacher = Boolean(state.isTeacher);
+    if (state.assignment && (isTeacher || state.assignment.pinned)) {
+      if (isTeacher || !state.assignment.isHidden) {
+        items.push({ ...state.assignment, isActive: true });
+      }
     }
-    const hist = Array.isArray(state.assignmentHistory) ? state.assignmentHistory.slice(0, 8) : [];
-    hist.forEach((h) => items.push({ ...h, isActive: false }));
+    const hist = Array.isArray(state.assignmentHistory) ? state.assignmentHistory : [];
+    hist.forEach((h) => {
+      if (state.assignment && String(state.assignment.id).trim() === String(h.id).trim()) return;
+      if (isTeacher || !h.isHidden) {
+        items.push({ ...h, isActive: false });
+      }
+    });
     return items;
   }
 
@@ -1510,12 +1524,15 @@
       .map((t) => {
         const isSelected = state.expandedTaskId === t.id;
         const preview = (t.instructions || '').replace(/\s+/g, ' ').trim();
+        const isHidden = Boolean(t.isHidden);
         return `
           <button type="button" class="task-mini-card ${t.isActive ? 'is-active-task' : ''} ${
             isSelected ? 'is-selected' : ''
-          }" data-task-id="${escapeHtml(t.id)}">
+          } ${isHidden ? 'is-hidden-task' : ''}" data-task-id="${escapeHtml(t.id)}">
             <div class="task-mini-top">
-              <span class="task-mini-tag">${t.isActive ? '📌 Activa' : '📄 Anterior'}</span>
+              <span class="task-mini-tag ${isHidden ? 'tag-hidden' : ''}">${
+                isHidden ? '🚫 Despublicada' : (t.isActive ? '📌 Activa' : '📄 Anterior')
+              }</span>
               ${t.dueNote ? `<span class="task-mini-due">${escapeHtml(t.dueNote)}</span>` : ''}
             </div>
             <div class="task-mini-title">${escapeHtml(t.title)}</div>
@@ -1534,7 +1551,9 @@
     }
 
     el.assignmentExpandedCard.classList.remove('hidden');
-    el.assignmentExpandedBadge.textContent = selected.isActive ? '📌 Tarea Activa' : '📄 Tarea Anterior';
+    el.assignmentExpandedBadge.textContent = selected.isHidden
+      ? '🚫 Tarea Despublicada'
+      : (selected.isActive ? '📌 Tarea Activa' : '📄 Tarea Anterior');
     el.assignmentTitle.textContent = selected.title;
 
     if (selected.dueNote) {
@@ -1555,6 +1574,14 @@
     } else {
       el.assignmentImage.src = '';
       el.assignmentImageWrap.classList.add('hidden');
+    }
+
+    if (el.expandedTaskTeacherActions) {
+      el.expandedTaskTeacherActions.classList.toggle('hidden', !state.isTeacher);
+      if (el.btnToggleHideExpandedTask) {
+        el.btnToggleHideExpandedTask.textContent = selected.isHidden ? '👁️ Republicar' : '🚫 Despublicar';
+        el.btnToggleHideExpandedTask.title = selected.isHidden ? 'Hacer visible a los alumnos' : 'Ocultar a los alumnos';
+      }
     }
   }
 
@@ -1772,17 +1799,99 @@
       .join('');
   }
 
+  function handleTeacherTaskEdit(task) {
+    if (!state.isTeacher || !task) return;
+    openTeacherPanel('assignment');
+    populateAssignmentForm(task, { isEditingActive: true, assignmentId: task.id });
+    switchTeacherTab('assignment');
+    setTimeout(() => {
+      if (el.assignmentForm) el.assignmentForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (el.taskTitleInput) el.taskTitleInput.focus();
+    }, 100);
+    showToast(`✏️ Tarea "${task.title}" cargada en el formulario para editar`, 'info');
+  }
+
+  function handleTeacherTaskToggleHide(task) {
+    if (!state.isTeacher || !task) return;
+    const linkedCount = getPadletPosts().filter((p) => p.assignmentId === task.id).length;
+    if (task.isHidden) {
+      socket.emit(
+        'teacher:assignment:toggle-hide',
+        {
+          teacherToken: state.teacherToken,
+          sessionId: state.activeSessionId,
+          assignmentId: task.id,
+          id: task.id,
+          hideLinkedPosts: false,
+        },
+        (ack) => {
+          if (ack?.ok) showToast(`👁️ Tarea "${task.title}" republicada para alumnos`, 'success');
+          else showToast(ack?.error || 'Error al republicar la tarea', 'error');
+        }
+      );
+    } else {
+      if (linkedCount === 0) {
+        socket.emit(
+          'teacher:assignment:toggle-hide',
+          {
+            teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
+            assignmentId: task.id,
+            id: task.id,
+            hideLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast(`🚫 Tarea "${task.title}" despublicada para alumnos`, 'info');
+            else showToast(ack?.error || 'Error al despublicar', 'error');
+          }
+        );
+      } else {
+        state.pendingCleanAssignmentId = task.id;
+        state.pendingCleanAssignmentAction = 'toggle-hide';
+        if (el.cleanModalTitle) el.cleanModalTitle.textContent = `Despublicar Tarea: "${task.title}"`;
+        if (el.cleanModalResponsesCount) el.cleanModalResponsesCount.textContent = String(linkedCount);
+        openModal(el.assignmentCleanModal);
+      }
+    }
+  }
+
+  function handleTeacherTaskDelete(task) {
+    if (!state.isTeacher || !task) return;
+    const linkedCount = getPadletPosts().filter((p) => p.assignmentId === task.id).length;
+    if (linkedCount === 0) {
+      if (window.confirm(`¿Eliminar permanentemente la tarea "${task.title}"?`)) {
+        socket.emit(
+          'teacher:assignment:delete',
+          {
+            teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
+            assignmentId: task.id,
+            id: task.id,
+          },
+          (ack) => {
+            if (ack?.ok) showToast('Tarea eliminada del panel y del historial', 'success');
+            else showToast(ack?.error || 'Error al eliminar tarea', 'error');
+          }
+        );
+      }
+    } else {
+      state.pendingCleanAssignmentId = task.id;
+      state.pendingCleanAssignmentAction = 'delete';
+      if (el.cleanModalTitle) el.cleanModalTitle.textContent = `Eliminar Tarea: "${task.title}"`;
+      if (el.cleanModalResponsesCount) el.cleanModalResponsesCount.textContent = String(linkedCount);
+      openModal(el.assignmentCleanModal);
+    }
+  }
+
   el.assignmentHistoryList.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-task-action]');
     if (!btn) return;
     const action = btn.dataset.taskAction;
     const taskId = btn.dataset.taskId;
     const task =
-      (state.assignmentHistory || []).find((h) => h.id === taskId) ||
-      (state.assignment?.id === taskId ? state.assignment : null);
+      (state.assignmentHistory || []).find((h) => String(h.id).trim() === String(taskId).trim()) ||
+      (state.assignment && String(state.assignment.id).trim() === String(taskId).trim() ? state.assignment : null);
     if (!task) return;
-
-    const linkedCount = getPadletPosts().filter((p) => p.assignmentId === task.id).length;
 
     if (action === 'view-responses') {
       state.activeTaskFilter = state.activeTaskFilter === task.id ? null : task.id;
@@ -1799,71 +1908,31 @@
         'info'
       );
     } else if (action === 'edit') {
-      populateAssignmentForm(task, { isEditingActive: true, assignmentId: task.id });
-      el.taskTitleInput.focus();
-      showToast(`Tarea "${task.title}" cargada para editar`);
+      handleTeacherTaskEdit(task);
     } else if (action === 'toggle-hide') {
-      if (task.isHidden) {
-        socket.emit(
-          'teacher:assignment:toggle-hide',
-          {
-            teacherToken: state.teacherToken,
-            assignmentId: task.id,
-            id: task.id,
-            hideLinkedPosts: false,
-          },
-          (ack) => {
-            if (ack?.ok) showToast(`👁️ Tarea "${task.title}" republicada para alumnos`, 'success');
-            else showToast(ack?.error || 'Error al republicar la tarea', 'error');
-          }
-        );
-      } else {
-        if (linkedCount === 0) {
-          socket.emit(
-            'teacher:assignment:toggle-hide',
-            {
-              teacherToken: state.teacherToken,
-              assignmentId: task.id,
-              id: task.id,
-              hideLinkedPosts: false,
-            },
-            (ack) => {
-              if (ack?.ok) showToast(`🚫 Tarea "${task.title}" despublicada para alumnos`, 'info');
-              else showToast(ack?.error || 'Error al despublicar', 'error');
-            }
-          );
-        } else {
-          state.pendingCleanAssignmentId = task.id;
-          state.pendingCleanAssignmentAction = 'toggle-hide';
-          if (el.cleanModalTitle) el.cleanModalTitle.textContent = `Despublicar Tarea: "${task.title}"`;
-          if (el.cleanModalResponsesCount) el.cleanModalResponsesCount.textContent = String(linkedCount);
-          openModal(el.assignmentCleanModal);
-        }
-      }
+      handleTeacherTaskToggleHide(task);
     } else if (action === 'delete') {
-      if (linkedCount === 0) {
-        if (window.confirm(`¿Eliminar permanentemente la tarea "${task.title}" del historial?`)) {
-          socket.emit(
-            'teacher:assignment:delete',
-            {
-              teacherToken: state.teacherToken,
-              assignmentId: task.id,
-              id: task.id,
-            },
-            (ack) => {
-              if (ack?.ok) showToast('Tarea eliminada del historial', 'success');
-              else showToast(ack?.error || 'Error al eliminar tarea', 'error');
-            }
-          );
-        }
-      } else {
-        state.pendingCleanAssignmentId = task.id;
-        state.pendingCleanAssignmentAction = 'delete';
-        if (el.cleanModalTitle) el.cleanModalTitle.textContent = `Eliminar Tarea: "${task.title}"`;
-        if (el.cleanModalResponsesCount) el.cleanModalResponsesCount.textContent = String(linkedCount);
-        openModal(el.assignmentCleanModal);
-      }
+      handleTeacherTaskDelete(task);
     }
+  });
+
+  // Direct Teacher Controls on Expanded Task Card (Main Screen)
+  el.btnEditExpandedTask?.addEventListener('click', () => {
+    const task = getExpandedTask();
+    if (!task) return;
+    handleTeacherTaskEdit(task);
+  });
+
+  el.btnToggleHideExpandedTask?.addEventListener('click', () => {
+    const task = getExpandedTask();
+    if (!task) return;
+    handleTeacherTaskToggleHide(task);
+  });
+
+  el.btnDeleteExpandedTask?.addEventListener('click', () => {
+    const task = getExpandedTask();
+    if (!task) return;
+    handleTeacherTaskDelete(task);
   });
 
   async function uploadFile(file) {
@@ -1901,6 +1970,7 @@
             'teacher:assignment:update',
             {
               teacherToken: state.teacherToken,
+              sessionId: state.activeSessionId,
               id: state.editingAssignmentId,
               assignmentId: state.editingAssignmentId,
               title,
@@ -1916,6 +1986,7 @@
         });
         if (!ack?.ok) throw new Error(ack?.error || 'No se pudo actualizar la tarea.');
         state.editingAssignmentId = null;
+        state.isEditingActiveAssignment = false;
         resetAssignmentFormToNew();
         closeModal(el.teacherPanelModal);
         showToast('Tarea actualizada correctamente', 'success');
@@ -1988,6 +2059,7 @@
           'teacher:assignment:delete',
           {
             teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
             assignmentId: taskId,
             id: taskId,
             hideLinkedPosts: true,
@@ -2003,6 +2075,7 @@
           'teacher:assignment:toggle-hide',
           {
             teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
             assignmentId: taskId,
             id: taskId,
             hideLinkedPosts: true,
@@ -2028,6 +2101,7 @@
           'teacher:assignment:delete',
           {
             teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
             assignmentId: taskId,
             id: taskId,
             deleteLinkedPosts: false,
@@ -2043,6 +2117,7 @@
           'teacher:assignment:toggle-hide',
           {
             teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
             assignmentId: taskId,
             id: taskId,
             hideLinkedPosts: false,
@@ -2068,6 +2143,7 @@
           'teacher:assignment:delete',
           {
             teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
             assignmentId: taskId,
             id: taskId,
             deleteLinkedPosts: true,
@@ -2083,6 +2159,7 @@
           'teacher:assignment:toggle-hide',
           {
             teacherToken: state.teacherToken,
+            sessionId: state.activeSessionId,
             assignmentId: taskId,
             id: taskId,
             deleteLinkedPosts: true,
@@ -6734,10 +6811,14 @@
       el.chatUnreadBadge.textContent = '0';
       el.chatUnreadBadge.classList.add('hidden');
     }
+    if (el.fabChatBadge) {
+      el.fabChatBadge.textContent = '0';
+      el.fabChatBadge.classList.add('hidden');
+    }
     if (el.chatDrawer) el.chatDrawer.classList.remove('hidden');
-    if (el.chatDrawerBackdrop) el.chatDrawerBackdrop.classList.remove('hidden');
+    // Note: Do not show blocking backdrop so users can interact with the panel and chat simultaneously
     if (el.chatSessionBadge) {
-      el.chatSessionBadge.textContent = state.board?.title || 'Clase';
+      el.chatSessionBadge.textContent = state.board?.eventName || state.board?.title || 'Sesión';
     }
 
     socket.emit('chat:history', { sessionId: state.activeSessionId }, (res) => {
@@ -6856,9 +6937,14 @@
       el.chatMessagesList.scrollTop = el.chatMessagesList.scrollHeight;
     } else {
       state.unreadChatCount = (state.unreadChatCount || 0) + 1;
+      const countStr = String(Math.min(99, state.unreadChatCount));
       if (el.chatUnreadBadge) {
-        el.chatUnreadBadge.textContent = String(Math.min(99, state.unreadChatCount));
+        el.chatUnreadBadge.textContent = countStr;
         el.chatUnreadBadge.classList.remove('hidden');
+      }
+      if (el.fabChatBadge) {
+        el.fabChatBadge.textContent = countStr;
+        el.fabChatBadge.classList.remove('hidden');
       }
       playChime('info');
     }
@@ -6935,6 +7021,10 @@
 
   // Chat Trigger Buttons
   el.btnOpenChat?.addEventListener('click', () => {
+    if (state.isChatOpen) closeChatDrawer();
+    else openChatDrawer();
+  });
+  el.fabChat?.addEventListener('click', () => {
     if (state.isChatOpen) closeChatDrawer();
     else openChatDrawer();
   });
