@@ -239,6 +239,8 @@
   const STORAGE_NAME_KEY = 'padletlocal_author_name';
   const STORAGE_ROLE_KEY = 'padletlocal_user_role';
   const STORAGE_SOUND_KEY = 'padletlocal_sound_enabled';
+  const STORAGE_CHAT_SOUND_KEY = 'padletlocal_chat_sound_enabled';
+  const STORAGE_MUTED_THREADS_KEY = 'padletlocal_chat_muted_threads';
   const STORAGE_TEACHER_TOKEN_KEY = 'padletlocal_teacher_token';
   const STORAGE_TEACHER_NAME_KEY = 'padletlocal_teacher_name';
   const STORAGE_UI_MODE_KEY = 'padletlocal_ui_mode';
@@ -271,6 +273,8 @@
     chatMessages: [],
     chatUsers: [],
     unreadChatCount: 0,
+    chatSoundEnabled: localStorage.getItem(STORAGE_CHAT_SOUND_KEY) !== 'false',
+    mutedThreads: new Set(JSON.parse(localStorage.getItem(STORAGE_MUTED_THREADS_KEY) || '[]')),
     isChatOpen: false,
     activeChatTab: 'messages',
     chatCurrentView: 'list', // 'list' | 'thread'
@@ -454,6 +458,8 @@
     chatPresenceInfo: document.getElementById('chatPresenceInfo'),
     chatCurrentUserName: document.getElementById('chatCurrentUserName'),
     btnChatEditMyNick: document.getElementById('btnChatEditMyNick'),
+    btnToggleChatSoundGlobal: document.getElementById('btnToggleChatSoundGlobal'),
+    btnToggleMuteCurrentThread: document.getElementById('btnToggleMuteCurrentThread'),
     chatThreadBanner: document.getElementById('chatThreadBanner'),
     chatThreadIcon: document.getElementById('chatThreadIcon'),
     chatThreadTitle: document.getElementById('chatThreadTitle'),
@@ -889,11 +895,14 @@
 
   // --- Sound Toggle UI ---
   function updateSoundUI() {
-    el.soundIconOn.classList.toggle('hidden', !state.soundEnabled);
-    el.soundIconOff.classList.toggle('hidden', state.soundEnabled);
-    el.btnSoundToggle.title = state.soundEnabled
-      ? 'Sonido de notificaciones activado (clic para silenciar)'
-      : 'Sonido silenciado (clic para activar)';
+    el.soundIconOn?.classList.toggle('hidden', !state.soundEnabled);
+    el.soundIconOff?.classList.toggle('hidden', state.soundEnabled);
+    if (el.btnSoundToggle) {
+      el.btnSoundToggle.title = state.soundEnabled
+        ? 'Sonido de notificaciones activado (clic para silenciar)'
+        : 'Sonido silenciado (clic para activar)';
+    }
+    updateGlobalChatSoundUI();
   }
 
   el.btnSoundToggle.addEventListener('click', () => {
@@ -1357,8 +1366,7 @@
   el.menuItemStudentSound?.addEventListener('click', () => {
     state.soundEnabled = !state.soundEnabled;
     localStorage.setItem(STORAGE_SOUND_KEY, state.soundEnabled ? 'true' : 'false');
-    el.soundIconOn?.classList.toggle('hidden', !state.soundEnabled);
-    el.soundIconOff?.classList.toggle('hidden', state.soundEnabled);
+    updateSoundUI();
     updateStudentMenuUI();
     showToast(state.soundEnabled ? '🔔 Sonido de alertas activado' : '🔕 Sonido de alertas silenciado');
   });
@@ -6986,6 +6994,69 @@
   // =====================================================================
   // LIVE SESSION CHAT DRAWER & INDEPENDENT ENCRYPTED MESSAGING
   // =====================================================================
+  function updateGlobalChatSoundUI() {
+    if (!el.btnToggleChatSoundGlobal) return;
+    const isMuted = state.chatSoundEnabled === false || state.soundEnabled === false;
+    el.btnToggleChatSoundGlobal.textContent = isMuted ? '🔕' : '🔔';
+    el.btnToggleChatSoundGlobal.title = isMuted
+      ? 'Sonido de chat silenciado en general (clic para activar sonido)'
+      : 'Sonido de chat activado (clic para silenciar todo el chat)';
+    el.btnToggleChatSoundGlobal.classList.toggle('is-muted', isMuted);
+  }
+
+  function updateThreadMuteUI() {
+    if (!el.btnToggleMuteCurrentThread) return;
+    const thread = state.activeChatThread || 'all';
+    const isMuted = state.mutedThreads.has(thread);
+    el.btnToggleMuteCurrentThread.textContent = isMuted ? '🔕' : '🔔';
+    el.btnToggleMuteCurrentThread.title = isMuted
+      ? 'Esta conversación está silenciada (clic para activar sonido)'
+      : 'Silenciar sonido de notificación para esta conversación';
+    el.btnToggleMuteCurrentThread.classList.toggle('is-muted', isMuted);
+  }
+
+  function toggleCurrentThreadMute() {
+    const thread = state.activeChatThread || 'all';
+    if (state.mutedThreads.has(thread)) {
+      state.mutedThreads.delete(thread);
+      showToast('🔔 Sonido activado para esta conversación', 'success');
+    } else {
+      state.mutedThreads.add(thread);
+      showToast('🔕 Sonido silenciado para esta conversación', 'info');
+    }
+    localStorage.setItem(STORAGE_MUTED_THREADS_KEY, JSON.stringify(Array.from(state.mutedThreads)));
+    updateThreadMuteUI();
+    renderConversationsList();
+  }
+
+  function toggleThreadMuteByKey(threadKey) {
+    if (!threadKey) return;
+    if (state.mutedThreads.has(threadKey)) {
+      state.mutedThreads.delete(threadKey);
+      showToast('🔔 Sonido activado para esta conversación', 'success');
+    } else {
+      state.mutedThreads.add(threadKey);
+      showToast('🔕 Sonido silenciado para esta conversación', 'info');
+    }
+    localStorage.setItem(STORAGE_MUTED_THREADS_KEY, JSON.stringify(Array.from(state.mutedThreads)));
+    if (state.activeChatThread === threadKey) {
+      updateThreadMuteUI();
+    }
+    renderConversationsList();
+  }
+
+  function toggleGlobalChatSound() {
+    state.chatSoundEnabled = !state.chatSoundEnabled;
+    localStorage.setItem(STORAGE_CHAT_SOUND_KEY, String(state.chatSoundEnabled));
+    updateGlobalChatSoundUI();
+    if (state.chatSoundEnabled) {
+      showToast('🔔 Sonido de notificaciones activado para el chat', 'success');
+      playChime('info');
+    } else {
+      showToast('🔕 Sonido de notificaciones silenciado para TODO el chat', 'info');
+    }
+  }
+
   function getThreadKeyForMessage(msg) {
     if (!msg) return 'all';
     if (!msg.isPrivate || msg.to === 'all') return 'all';
@@ -7091,6 +7162,7 @@
       }
       el.chatPrivacyNote?.classList.remove('hidden');
     }
+    updateThreadMuteUI();
   }
 
   function isMsgInThread(m, thread) {
@@ -7270,6 +7342,7 @@
     el.chatConversationsList.innerHTML = sorted
       .map((c) => {
         const hasUnread = c.unread > 0;
+        const isMuted = state.mutedThreads.has(c.threadKey);
         return `
           <div class="chat-conv-item ${hasUnread ? 'has-unread' : ''}" data-conv-thread="${escapeHtml(c.threadKey)}">
             <div class="chat-conv-avatar" style="background:${c.avatarBg};">
@@ -7280,12 +7353,14 @@
               <div class="chat-conv-row-top">
                 <span class="chat-conv-name">
                   ${escapeHtml(c.title)}
+                  ${isMuted ? '<span class="chat-conv-muted-icon" title="Sonido silenciado en este chat">🔕</span>' : ''}
                   ${c.roleTag}
                 </span>
                 <span class="chat-conv-time">${escapeHtml(c.lastTime)}</span>
               </div>
               <div class="chat-conv-row-bottom">
                 <span class="chat-conv-last-msg">${escapeHtml(c.lastMsg)}</span>
+                <button type="button" class="btn-chat-conv-mute ${isMuted ? 'is-muted' : ''}" data-mute-thread="${escapeHtml(c.threadKey)}" title="${isMuted ? 'Activar sonido de notificación para este chat' : 'Silenciar sonido de notificación para este chat'}">${isMuted ? '🔕' : '🔔'}</button>
                 ${hasUnread ? `<span class="chat-unread-pill">${c.unread}</span>` : ''}
               </div>
             </div>
@@ -7298,6 +7373,8 @@
   function openChatDrawer() {
     state.isChatOpen = true;
     if (el.chatDrawer) el.chatDrawer.classList.remove('hidden');
+    updateGlobalChatSoundUI();
+    updateThreadMuteUI();
     if (el.chatSessionBadge) {
       el.chatSessionBadge.textContent = state.board?.eventName || state.board?.title || 'Sesión';
     }
@@ -7498,14 +7575,19 @@
       }
 
       if (!isFromMe) {
-        playChime('info');
+        const isGlobalMuted = (state.soundEnabled === false || state.chatSoundEnabled === false);
+        const isThreadMuted = state.mutedThreads.has(msgThread);
+        if (!isGlobalMuted && !isThreadMuted) {
+          playChime('info');
+        }
         const sender = msg.authorName || (msg.isTeacher ? 'Docente' : 'Alumno');
         const shortSnippet = msg.text.length > 50 ? msg.text.slice(0, 47) + '...' : msg.text;
+        const mutedBadge = isThreadMuted ? '<span style="opacity:0.75;font-size:0.8rem;margin-left:4px;" title="Conversación silenciada">🔕</span>' : '';
         const toastHtml = `
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:1.15rem;">💬</span>
             <div>
-              <strong>${escapeHtml(sender)}</strong>: "${escapeHtml(shortSnippet)}"<br>
+              <strong>${escapeHtml(sender)}</strong>${mutedBadge}: "${escapeHtml(shortSnippet)}"<br>
               <small style="opacity:0.85;color:#818cf8;font-weight:600;">👉 Toca aquí para abrir y responder</small>
             </div>
           </div>
@@ -7634,6 +7716,8 @@
   el.btnCloseChat?.addEventListener('click', closeChatDrawer);
   el.chatDrawerBackdrop?.addEventListener('click', closeChatDrawer);
   el.btnChatEditMyNick?.addEventListener('click', promptChangeNick);
+  el.btnToggleChatSoundGlobal?.addEventListener('click', toggleGlobalChatSound);
+  el.btnToggleMuteCurrentThread?.addEventListener('click', toggleCurrentThreadMute);
 
   el.menuItemStudentChat?.addEventListener('click', () => {
     closeActionMenus();
@@ -7657,8 +7741,17 @@
     switchChatTab('users');
   });
 
-  // Clicking an item in the conversations list opens that thread!
+  // Clicking an item in the conversations list opens that thread, or mutes it
   el.chatConversationsList?.addEventListener('click', (e) => {
+    const btnMute = e.target.closest('.btn-chat-conv-mute');
+    if (btnMute) {
+      e.stopPropagation();
+      const threadKey = btnMute.dataset.muteThread;
+      if (threadKey) {
+        toggleThreadMuteByKey(threadKey);
+      }
+      return;
+    }
     const item = e.target.closest('[data-conv-thread]');
     if (!item) return;
     const threadKey = item.dataset.convThread;

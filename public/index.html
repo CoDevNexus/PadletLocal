@@ -223,6 +223,7 @@
         </div>
       </div>
       <div class="chat-drawer-head-actions">
+        <button type="button" id="btnToggleChatSoundGlobal" class="icon-btn-subtle" title="Silenciar / Activar sonido de notificaciones para todo el chat">🔔</button>
         <button type="button" id="btnClearChat" class="icon-btn-subtle teacher-only" title="Limpiar historial de chat de esta sesión">🧹</button>
         <button type="button" id="btnCloseChat" class="icon-btn-subtle" aria-label="Cerrar chat">✕</button>
       </div>
@@ -270,7 +271,10 @@
             <span id="chatThreadIcon">📢</span>
             <strong id="chatThreadTitle" class="chat-thread-title-text">Canal General</strong>
           </div>
-          <span id="chatThreadBadge" class="chat-thread-badge badge-public">Público</span>
+          <div class="chat-thread-header-actions">
+            <button type="button" id="btnToggleMuteCurrentThread" class="btn btn-xs btn-ghost btn-chat-mute-thread" title="Silenciar / Activar sonido de este chat">🔔</button>
+            <span id="chatThreadBadge" class="chat-thread-badge badge-public">Público</span>
+          </div>
         </div>
 
         <div class="chat-target-bar">
