@@ -3353,7 +3353,7 @@
     );
   });
 
-  el.sessionsList.addEventListener('click', (e) => {
+  el.sessionsList.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-session-action]');
     if (!btn) return;
     const itemEl = btn.closest('.session-item');
@@ -3646,14 +3646,6 @@
             }
           );
         });
-      }
-              showToast(res?.error || 'No se pudo expulsar al alumno', 'error');
-            } else {
-              showToast(`👢 ${sName} ha sido expulsado de la clase`, 'success');
-              loadTeacherStudents();
-            }
-          }
-        );
       }
     });
   }
