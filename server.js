@@ -4,6 +4,7 @@ const https = require('https');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
+const { spawn } = require('child_process');
 const multer = require('multer');
 const QRCode = require('qrcode');
 const { Server } = require('socket.io');
@@ -226,9 +227,158 @@ app.get('/api/info', async (_req, res) => {
       board: store.getBoard(),
       onlineCount: io.engine.clientsCount,
       serverTime: Date.now(),
+      tunnel: {
+        active: Boolean(cloudflareTunnelUrl),
+        url: cloudflareTunnelUrl,
+        qr: cloudflareTunnelQr,
+        status: cloudflareTunnelStatus,
+      },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Cloudflare Tunnel Management (Quick Tunnel - Opcional) ---
+let cloudflareProcess = null;
+let cloudflareTunnelUrl = null;
+let cloudflareTunnelQr = null;
+let cloudflareTunnelStatus = 'stopped'; // 'stopped' | 'starting' | 'active' | 'error'
+let cloudflareTunnelError = null;
+
+async function startCloudflareTunnel() {
+  if (cloudflareProcess && cloudflareTunnelUrl) {
+    return {
+      active: true,
+      url: cloudflareTunnelUrl,
+      qr: cloudflareTunnelQr,
+      status: cloudflareTunnelStatus,
+    };
+  }
+
+  cloudflareTunnelStatus = 'starting';
+  cloudflareTunnelError = null;
+  cloudflareTunnelUrl = null;
+  cloudflareTunnelQr = null;
+
+  try {
+    const proc = spawn('cloudflared', ['tunnel', '--url', `http://127.0.0.1:${HTTP_PORT}`], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+
+    cloudflareProcess = proc;
+
+    const onOutput = async (data) => {
+      const text = data.toString();
+      const match = text.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+      if (match && !cloudflareTunnelUrl) {
+        cloudflareTunnelUrl = match[0];
+        cloudflareTunnelStatus = 'active';
+        try {
+          cloudflareTunnelQr = await QRCode.toDataURL(cloudflareTunnelUrl, {
+            margin: 1,
+            width: 240,
+            color: { dark: '#0f172a', light: '#ffffff' },
+          });
+        } catch {}
+        io.emit('tunnel:status', {
+          active: true,
+          url: cloudflareTunnelUrl,
+          qr: cloudflareTunnelQr,
+          status: 'active',
+        });
+      }
+    };
+
+    proc.stdout.on('data', onOutput);
+    proc.stderr.on('data', onOutput);
+
+    proc.on('error', (err) => {
+      console.warn('Error launching cloudflared:', err.message);
+      cloudflareProcess = null;
+      cloudflareTunnelStatus = 'error';
+      cloudflareTunnelError = err.message;
+      io.emit('tunnel:status', {
+        active: false,
+        url: null,
+        qr: null,
+        status: 'error',
+        error: err.message,
+      });
+    });
+
+    proc.on('close', () => {
+      cloudflareProcess = null;
+      cloudflareTunnelStatus = 'stopped';
+      cloudflareTunnelUrl = null;
+      cloudflareTunnelQr = null;
+      io.emit('tunnel:status', {
+        active: false,
+        url: null,
+        qr: null,
+        status: 'stopped',
+      });
+    });
+
+    return {
+      active: false,
+      status: 'starting',
+      url: null,
+    };
+  } catch (err) {
+    cloudflareTunnelStatus = 'error';
+    cloudflareTunnelError = err.message;
+    return {
+      active: false,
+      status: 'error',
+      error: err.message,
+    };
+  }
+}
+
+function stopCloudflareTunnel() {
+  if (cloudflareProcess) {
+    try {
+      cloudflareProcess.kill();
+    } catch {}
+    cloudflareProcess = null;
+  }
+  cloudflareTunnelStatus = 'stopped';
+  cloudflareTunnelUrl = null;
+  cloudflareTunnelQr = null;
+  io.emit('tunnel:status', {
+    active: false,
+    url: null,
+    qr: null,
+    status: 'stopped',
+  });
+  return { active: false, status: 'stopped' };
+}
+
+app.get('/api/tunnel', (_req, res) => {
+  res.json({
+    active: Boolean(cloudflareTunnelUrl),
+    url: cloudflareTunnelUrl,
+    qr: cloudflareTunnelQr,
+    status: cloudflareTunnelStatus,
+    error: cloudflareTunnelError,
+  });
+});
+
+app.post('/api/tunnel/toggle', async (req, res) => {
+  try {
+    const { start, teacherToken } = req.body || {};
+    if (teacherToken) requireTeacher(teacherToken);
+    if (start) {
+      const result = await startCloudflareTunnel();
+      res.json({ ok: true, ...result });
+    } else {
+      const result = stopCloudflareTunnel();
+      res.json({ ok: true, ...result });
+    }
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
   }
 });
 
@@ -781,6 +931,15 @@ function emitPostToRoom(sessionId, eventName, post) {
   for (const sock of getRoomSockets(sessionId)) {
     if (post.isHidden && !sock.data.isTeacher) continue;
     sock.emit(eventName, enriched);
+  }
+}
+
+function broadcastPostsToRoom(sessionId) {
+  for (const sock of getRoomSockets(sessionId)) {
+    const isTeacher = Boolean(sock.data.isTeacher);
+    sock.emit('posts:sync', {
+      posts: getEnrichedPosts(sessionId, { includeHidden: isTeacher }),
+    });
   }
 }
 
@@ -1850,6 +2009,132 @@ io.on('connection', (socket) => {
       const result = store.clearAssignment(session.id);
       io.to(sessionRoom(session.id)).emit('assignment:updated', result);
       if (typeof ack === 'function') ack({ ok: true, ...result });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:assignment:update', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket, payload?.sessionId);
+      const targetId = payload.id || payload.assignmentId;
+      const result = store.updateAssignment(
+        targetId,
+        {
+          title: payload.title,
+          instructions: payload.instructions,
+          dueNote: payload.dueNote,
+          imageUrl: payload.imageUrl,
+          imageName: payload.imageName,
+          isHidden: payload.isHidden,
+          author: payload.author || 'Profesor',
+        },
+        session.id
+      );
+      io.to(sessionRoom(session.id)).emit('assignment:updated', {
+        assignment: result.assignment,
+        assignmentHistory: result.assignmentHistory,
+      });
+      broadcastPostsToRoom(session.id);
+      if (typeof ack === 'function') ack({ ok: true, ...result });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:assignment:toggle-hide', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket, payload?.sessionId);
+      const targetId = payload.id || payload.assignmentId;
+      const result = store.toggleHideAssignment(
+        targetId,
+        {
+          hideLinkedPosts: Boolean(payload.hideLinkedPosts),
+          deleteLinkedPosts: Boolean(payload.deleteLinkedPosts),
+        },
+        session.id
+      );
+      io.to(sessionRoom(session.id)).emit('assignment:updated', {
+        assignment: result.assignment,
+        assignmentHistory: result.assignmentHistory,
+      });
+      if (result.affectedPostsCount > 0) {
+        broadcastPostsToRoom(session.id);
+      }
+      if (typeof ack === 'function') ack({ ok: true, ...result });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:assignment:delete', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket, payload?.sessionId);
+      const targetId = payload.id || payload.assignmentId;
+      const result = store.deleteAssignment(
+        targetId,
+        {
+          deleteLinkedPosts: Boolean(payload.deleteLinkedPosts),
+          hideLinkedPosts: Boolean(payload.hideLinkedPosts),
+        },
+        session.id
+      );
+      io.to(sessionRoom(session.id)).emit('assignment:updated', {
+        assignment: result.assignment,
+        assignmentHistory: result.assignmentHistory,
+      });
+      if (result.affectedPostsCount > 0) {
+        broadcastPostsToRoom(session.id);
+      }
+      if (typeof ack === 'function') ack({ ok: true, ...result });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:assignment:get-stats', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      const session = getSocketSession(socket, payload?.sessionId);
+      const linkedPosts = store.getAssignmentLinkedPosts(payload?.id, session.id);
+      if (typeof ack === 'function') {
+        ack({
+          ok: true,
+          count: linkedPosts.length,
+          posts: linkedPosts.map(enrichPost),
+        });
+      }
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  // Cloudflare Tunnel socket events
+  socket.on('tunnel:get-status', (ack) => {
+    if (typeof ack === 'function') {
+      ack({
+        active: Boolean(cloudflareTunnelUrl),
+        url: cloudflareTunnelUrl,
+        qr: cloudflareTunnelQr,
+        status: cloudflareTunnelStatus,
+        error: cloudflareTunnelError,
+      });
+    }
+  });
+
+  socket.on('teacher:tunnel:toggle', async (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      if (payload?.start) {
+        const result = await startCloudflareTunnel();
+        if (typeof ack === 'function') ack({ ok: true, ...result });
+      } else {
+        const result = stopCloudflareTunnel();
+        if (typeof ack === 'function') ack({ ok: true, ...result });
+      }
     } catch (err) {
       if (typeof ack === 'function') ack({ ok: false, error: err.message });
     }

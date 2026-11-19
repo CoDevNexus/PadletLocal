@@ -77,11 +77,25 @@ function normalizeSession(raw) {
           isHidden: Boolean(p.isHidden),
           hiddenAt: p.hiddenAt || null,
           hiddenBy: p.hiddenBy || null,
+          assignmentId: p.assignmentId || null,
+          assignmentTitle: p.assignmentTitle || null,
           order: typeof p.order === 'number' ? p.order : idx,
         }))
       : [],
-    assignment: raw?.assignment || null,
-    assignmentHistory: Array.isArray(raw?.assignmentHistory) ? raw.assignmentHistory : [],
+    assignment: raw?.assignment
+      ? {
+          ...raw.assignment,
+          id: raw.assignment.id || crypto.randomUUID(),
+          isHidden: Boolean(raw.assignment.isHidden),
+        }
+      : null,
+    assignmentHistory: Array.isArray(raw?.assignmentHistory)
+      ? raw.assignmentHistory.map((h) => ({
+          ...h,
+          id: h.id || crypto.randomUUID(),
+          isHidden: Boolean(h.isHidden),
+        }))
+      : [],
     notifications: Array.isArray(raw?.notifications) ? raw.notifications : [],
     timer: raw?.timer || null,
     scheduledTimers: Array.isArray(raw?.scheduledTimers) ? raw.scheduledTimers : [],
@@ -471,6 +485,8 @@ class BoardStore {
       imageUrl,
       imageName,
       kind = 'padlet',
+      assignmentId = null,
+      assignmentTitle = null,
       sessionId: payloadSid,
     } = payload || {};
 
@@ -514,6 +530,8 @@ class BoardStore {
       color: cleanColor,
       imageUrl: imageUrl ? String(imageUrl).slice(0, 300) : null,
       imageName: imageName ? String(imageName).slice(0, 150) : null,
+      assignmentId: assignmentId ? String(assignmentId).slice(0, 80) : null,
+      assignmentTitle: assignmentTitle ? String(assignmentTitle).trim().slice(0, 150) : null,
       pinned: false,
       reviewed: false,
       reviewedAt: null,
@@ -577,7 +595,7 @@ class BoardStore {
 
   updatePost(
     id,
-    { authorId, topic, content, color, imageUrl, imageName, removeImage, force = false },
+    { authorId, topic, content, color, imageUrl, imageName, removeImage, assignmentId, assignmentTitle, force = false },
     sessionId = null
   ) {
     const session = this.resolveSession(sessionId);
@@ -602,6 +620,13 @@ class BoardStore {
 
     if (typeof color === 'string' && VALID_COLORS.has(color)) {
       post.color = color;
+    }
+
+    if (typeof assignmentId !== 'undefined') {
+      post.assignmentId = assignmentId ? String(assignmentId).trim() : null;
+    }
+    if (typeof assignmentTitle !== 'undefined') {
+      post.assignmentTitle = assignmentTitle ? String(assignmentTitle).trim().slice(0, 150) : null;
     }
 
     if (removeImage && post.imageUrl) {
@@ -847,6 +872,7 @@ class BoardStore {
       imageUrl: imageUrl ? String(imageUrl).slice(0, 300) : null,
       imageName: imageName ? String(imageName).slice(0, 150) : null,
       pinned: Boolean(pinned),
+      isHidden: false,
       updatedBy: cleanAuthor,
       updatedAt: new Date().toISOString(),
     };
@@ -857,6 +883,175 @@ class BoardStore {
       assignment: session.assignment,
       assignmentHistory: session.assignmentHistory,
     };
+  }
+
+  updateAssignment(
+    id,
+    { title, instructions, dueNote, imageUrl, imageName, isHidden, author = 'Profesor' },
+    sessionId = null
+  ) {
+    const session = this.resolveSession(sessionId);
+    let target = null;
+    let isCurrent = false;
+
+    if (session.assignment && session.assignment.id === id) {
+      target = session.assignment;
+      isCurrent = true;
+    } else {
+      target = session.assignmentHistory.find((h) => h.id === id);
+    }
+
+    if (!target) {
+      throw new Error('Tarea no encontrada en esta sesión.');
+    }
+
+    if (typeof title === 'string') {
+      const cleanTitle = title.trim().slice(0, 120);
+      if (!cleanTitle) throw new Error('El título de la tarea es obligatorio.');
+      target.title = cleanTitle;
+      // Also update linked posts assignmentTitle
+      session.posts.forEach((p) => {
+        if (p.assignmentId === id) p.assignmentTitle = cleanTitle;
+      });
+    }
+
+    if (typeof instructions === 'string') {
+      target.instructions = instructions.trim().slice(0, 6000);
+    }
+
+    if (typeof dueNote === 'string') {
+      target.dueNote = dueNote.trim().slice(0, 100);
+    }
+
+    if (imageUrl !== undefined) {
+      target.imageUrl = imageUrl ? String(imageUrl).slice(0, 300) : null;
+      target.imageName = imageName ? String(imageName).slice(0, 150) : null;
+    }
+
+    if (isHidden !== undefined) {
+      target.isHidden = Boolean(isHidden);
+    }
+
+    target.updatedBy = String(author || 'Profesor').trim().slice(0, 50);
+    target.updatedAt = new Date().toISOString();
+
+    this.save();
+    return {
+      assignment: session.assignment,
+      assignmentHistory: session.assignmentHistory,
+      updatedAssignment: target,
+      isCurrent,
+    };
+  }
+
+  toggleHideAssignment(
+    id,
+    { hideLinkedPosts = false, deleteLinkedPosts = false } = {},
+    sessionId = null
+  ) {
+    const session = this.resolveSession(sessionId);
+    let target = null;
+    let isCurrent = false;
+
+    if (session.assignment && session.assignment.id === id) {
+      target = session.assignment;
+      isCurrent = true;
+    } else {
+      target = session.assignmentHistory.find((h) => h.id === id);
+    }
+
+    if (!target) {
+      throw new Error('Tarea no encontrada en esta sesión.');
+    }
+
+    target.isHidden = !target.isHidden;
+    target.updatedAt = new Date().toISOString();
+
+    let affectedPostsCount = 0;
+    if (deleteLinkedPosts) {
+      const beforeCount = session.posts.length;
+      session.posts = session.posts.filter((p) => p.assignmentId !== id);
+      affectedPostsCount = beforeCount - session.posts.length;
+    } else if (hideLinkedPosts) {
+      session.posts.forEach((p) => {
+        if (p.assignmentId === id) {
+          p.isHidden = target.isHidden;
+          if (target.isHidden) {
+            p.hiddenAt = new Date().toISOString();
+            p.hiddenBy = 'Profesor (Tarea oculta)';
+          } else {
+            p.hiddenAt = null;
+            p.hiddenBy = null;
+          }
+          affectedPostsCount++;
+        }
+      });
+    }
+
+    this.save();
+    return {
+      assignment: session.assignment,
+      assignmentHistory: session.assignmentHistory,
+      updatedAssignment: target,
+      affectedPostsCount,
+      isCurrent,
+    };
+  }
+
+  deleteAssignment(
+    id,
+    { deleteLinkedPosts = false, hideLinkedPosts = false } = {},
+    sessionId = null
+  ) {
+    const session = this.resolveSession(sessionId);
+    let deleted = false;
+    let isCurrent = false;
+
+    if (session.assignment && session.assignment.id === id) {
+      session.assignment = null;
+      deleted = true;
+      isCurrent = true;
+    }
+
+    const prevHistoryLen = session.assignmentHistory.length;
+    session.assignmentHistory = session.assignmentHistory.filter((h) => h.id !== id);
+    if (session.assignmentHistory.length < prevHistoryLen) {
+      deleted = true;
+    }
+
+    if (!deleted) {
+      throw new Error('Tarea no encontrada.');
+    }
+
+    let affectedPostsCount = 0;
+    if (deleteLinkedPosts) {
+      const beforeCount = session.posts.length;
+      session.posts = session.posts.filter((p) => p.assignmentId !== id);
+      affectedPostsCount = beforeCount - session.posts.length;
+    } else if (hideLinkedPosts) {
+      session.posts.forEach((p) => {
+        if (p.assignmentId === id) {
+          p.isHidden = true;
+          p.hiddenAt = new Date().toISOString();
+          p.hiddenBy = 'Profesor (Tarea eliminada)';
+          affectedPostsCount++;
+        }
+      });
+    }
+
+    this.save();
+    return {
+      assignment: session.assignment,
+      assignmentHistory: session.assignmentHistory,
+      affectedPostsCount,
+      isCurrent,
+    };
+  }
+
+  getAssignmentLinkedPosts(assignmentId, sessionId = null) {
+    const session = this.resolveSession(sessionId);
+    if (!assignmentId) return [];
+    return session.posts.filter((p) => p.assignmentId === assignmentId);
   }
 
   setAssignmentPinned(pinned, sessionId = null) {

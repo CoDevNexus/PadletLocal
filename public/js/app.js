@@ -297,7 +297,14 @@
     activeTeacherTab: 'assignment',
 
     activeTopic: '__ALL__', // '__ALL__' | '__LIVE__' | '__UNREVIEWED__' | '__REVIEWED__' | topic string
+    activeAuthor: null, // null or string author name to filter by author
+    activeTaskFilter: null, // null or assignmentId to filter by task
     searchQuery: '',
+    screenSearchQuery: '',
+    composerAssignmentId: null,
+    composerAssignmentTitle: null,
+    pendingCleanAssignmentId: null,
+    pendingCleanAssignmentAction: null, // 'toggle-hide' | 'clear' | 'delete'
     expandedCards: new Set(),
     openComments: new Set(),
     serverInfo: null,
@@ -740,6 +747,32 @@
     screenTargetUsersBox: document.getElementById('screenTargetUsersBox'),
     screenTargetUsersList: document.getElementById('screenTargetUsersList'),
 
+    // Screens Search
+    screenSearchInput: document.getElementById('screenSearchInput'),
+
+    // Composer Assignment Linking
+    composerAssignmentRefBox: document.getElementById('composerAssignmentRefBox'),
+    composerAssignmentRefTitle: document.getElementById('composerAssignmentRefTitle'),
+    composerAssignmentId: document.getElementById('composerAssignmentId'),
+    composerAssignmentTitle: document.getElementById('composerAssignmentTitle'),
+    btnRemoveAssignmentRef: document.getElementById('btnRemoveAssignmentRef'),
+
+    // Assignment Clean / Unpublish Modal
+    assignmentCleanModal: document.getElementById('assignmentCleanModal'),
+    cleanModalResponsesCount: document.getElementById('cleanModalResponsesCount'),
+    btnCleanHideResponses: document.getElementById('btnCleanHideResponses'),
+    btnCleanKeepResponses: document.getElementById('btnCleanKeepResponses'),
+    btnCleanDeleteResponses: document.getElementById('btnCleanDeleteResponses'),
+
+    // Cloudflare Tunnel
+    tunnelStatusBadge: document.getElementById('tunnelStatusBadge'),
+    tunnelActiveBox: document.getElementById('tunnelActiveBox'),
+    inputTunnelUrl: document.getElementById('inputTunnelUrl'),
+    btnCopyTunnelUrl: document.getElementById('btnCopyTunnelUrl'),
+    imgTunnelQr: document.getElementById('imgTunnelQr'),
+    tunnelErrorBox: document.getElementById('tunnelErrorBox'),
+    btnToggleTunnel: document.getElementById('btnToggleTunnel'),
+
     toastContainer: document.getElementById('toastContainer'),
   };
 
@@ -986,14 +1019,16 @@
   function updateAssignmentFormHeaderUI() {
     if (!el.assignmentModeBadge) return;
     const hasActive = Boolean(state.assignment);
+    const isEditing = Boolean(state.editingAssignmentId || (state.isEditingActiveAssignment && state.assignment));
+
     if (el.btnLoadActiveAssignment) {
-      el.btnLoadActiveAssignment.classList.toggle('hidden', !hasActive || state.isEditingActiveAssignment);
+      el.btnLoadActiveAssignment.classList.toggle('hidden', !hasActive || isEditing);
     }
-    if (state.isEditingActiveAssignment && state.assignment) {
-      el.assignmentModeBadge.textContent = '✏️ Editando Tarea Activa';
+    if (isEditing) {
+      el.assignmentModeBadge.textContent = '✏️ Editando Tarea';
       el.assignmentModeBadge.style.background = '#f59e0b';
       if (el.assignmentModeHint) {
-        el.assignmentModeHint.textContent = 'Modificando la consigna actual fijada en el panel';
+        el.assignmentModeHint.textContent = 'Modificando la tarea seleccionada. Los cambios se actualizarán de inmediato.';
       }
       if (el.btnSaveAssignment) {
         el.btnSaveAssignment.textContent = 'Guardar cambios de tarea';
@@ -1012,6 +1047,7 @@
 
   function resetAssignmentFormToNew() {
     state.isEditingActiveAssignment = false;
+    state.editingAssignmentId = null;
     el.taskTitleInput.value = '';
     el.taskDueInput.value = '';
     el.taskInstructionsInput.value = '';
@@ -1027,8 +1063,9 @@
     updateAssignmentFormHeaderUI();
   }
 
-  function populateAssignmentForm(assignment, { isEditingActive = false } = {}) {
+  function populateAssignmentForm(assignment, { isEditingActive = false, assignmentId = null } = {}) {
     state.isEditingActiveAssignment = Boolean(isEditingActive);
+    state.editingAssignmentId = assignmentId || assignment?.id || null;
     el.taskTitleInput.value = assignment?.title || '';
     el.taskDueInput.value = assignment?.dueNote || '';
     el.taskInstructionsInput.value = assignment?.instructions || '';
@@ -1532,6 +1569,14 @@
       el.inputTopic.value = task.title.slice(0, 100);
       if (authorName) el.inputContent.focus();
     }
+    if (task?.id) {
+      state.composerAssignmentId = task.id;
+      state.composerAssignmentTitle = task.title || '';
+      if (el.composerAssignmentId) el.composerAssignmentId.value = task.id;
+      if (el.composerAssignmentRefTitle) el.composerAssignmentRefTitle.textContent = task.title || '';
+      if (el.composerAssignmentTitle) el.composerAssignmentTitle.textContent = task.title || '';
+      if (el.composerAssignmentRefBox) el.composerAssignmentRefBox.classList.remove('hidden');
+    }
     if (el.composerTitle) {
       el.composerTitle.textContent = 'Responder tarea: ' + (task?.title || '');
     }
@@ -1539,6 +1584,19 @@
       el.btnSubmitPost.textContent = 'Publicar respuesta';
     }
   });
+
+  if (el.btnRemoveAssignmentRef) {
+    el.btnRemoveAssignmentRef.addEventListener('click', () => {
+      state.composerAssignmentId = null;
+      state.composerAssignmentTitle = null;
+      if (el.composerAssignmentId) el.composerAssignmentId.value = '';
+      if (el.composerAssignmentRefTitle) el.composerAssignmentRefTitle.textContent = '';
+      if (el.composerAssignmentTitle) el.composerAssignmentTitle.textContent = '';
+      if (el.composerAssignmentRefBox) el.composerAssignmentRefBox.classList.add('hidden');
+      if (el.composerTitle) el.composerTitle.textContent = 'Nueva publicación (Padlet)';
+      if (el.btnSubmitPost) el.btnSubmitPost.textContent = 'Publicar Padlet';
+    });
+  }
 
   function showTaskImagePreview(src) {
     if (src) {
@@ -1637,28 +1695,144 @@
       return;
     }
     el.assignmentHistoryBox.classList.remove('hidden');
+
+    const padlets = getPadletPosts();
+
     el.assignmentHistoryList.innerHTML = list
-      .map(
-        (item, idx) => `
-        <div class="history-item">
-          <div>
-            <strong>${escapeHtml(item.title)}</strong>
-            <div class="muted-note" style="font-size:0.74rem;">${formatRelativeTime(item.updatedAt)}</div>
+      .map((item) => {
+        const linkedCount = padlets.filter((p) => p.assignmentId === item.id).length;
+        const isHidden = Boolean(item.isHidden);
+        return `
+        <div class="history-item" data-task-id="${escapeHtml(item.id)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--bg-input);border-radius:8px;margin-bottom:8px;border:1px solid var(--border);">
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="color:var(--text);font-size:0.9rem;">${escapeHtml(item.title)}</strong>
+              ${
+                isHidden
+                  ? '<span class="hidden-tag" style="font-size:0.68rem;padding:2px 6px;">🚫 Despublicada</span>'
+                  : '<span style="font-size:0.68rem;padding:2px 6px;border-radius:4px;background:rgba(34,197,94,0.15);color:#16a34a;font-weight:600;">👁️ Publicada</span>'
+              }
+              ${item.pinned ? '<span class="pinned-tag" style="font-size:0.68rem;padding:2px 6px;">📌 Fijada</span>' : ''}
+            </div>
+            <div class="muted-note" style="font-size:0.75rem;margin-top:3px;color:var(--text-muted);">
+              ${formatRelativeTime(item.updatedAt || item.createdAt)} · 📝 <strong>${linkedCount}</strong> ${
+                linkedCount === 1 ? 'respuesta vinculada' : 'respuestas vinculadas'
+              }
+            </div>
           </div>
-          <button type="button" class="btn btn-sm btn-secondary" data-load-history="${idx}">Cargar</button>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+            <button type="button" class="btn btn-sm btn-ghost" data-task-action="view-responses" data-task-id="${escapeHtml(
+              item.id
+            )}" title="Ver solo las respuestas a esta tarea en el panel">📂 Ver (${linkedCount})</button>
+            <button type="button" class="btn btn-sm btn-secondary" data-task-action="edit" data-task-id="${escapeHtml(
+              item.id
+            )}" title="Editar tarea">✏️ Editar</button>
+            <button type="button" class="btn btn-sm btn-secondary" data-task-action="toggle-hide" data-task-id="${escapeHtml(
+              item.id
+            )}" title="${isHidden ? 'Republicar tarea para alumnos' : 'Despublicar / Ocultar tarea a alumnos'}">${
+              isHidden ? '👁️ Republicar' : '🚫 Despublicar'
+            }</button>
+            <button type="button" class="btn btn-sm btn-danger" data-task-action="delete" data-task-id="${escapeHtml(
+              item.id
+            )}" title="Eliminar tarea del historial">🗑️</button>
+          </div>
         </div>
-      `
-      )
+      `;
+      })
       .join('');
   }
 
   el.assignmentHistoryList.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-load-history]');
+    const btn = e.target.closest('[data-task-action]');
     if (!btn) return;
-    const item = state.assignmentHistory[Number(btn.dataset.loadHistory)];
-    if (item) {
-      populateAssignmentForm(item, { isEditingActive: false });
-      showToast('Tarea anterior cargada en el formulario');
+    const action = btn.dataset.taskAction;
+    const taskId = btn.dataset.taskId;
+    const task =
+      (state.assignmentHistory || []).find((h) => h.id === taskId) ||
+      (state.assignment?.id === taskId ? state.assignment : null);
+    if (!task) return;
+
+    const linkedCount = getPadletPosts().filter((p) => p.assignmentId === task.id).length;
+
+    if (action === 'view-responses') {
+      state.activeTaskFilter = state.activeTaskFilter === task.id ? null : task.id;
+      state.activeAuthor = null;
+      state.activeTopic = '__ALL__';
+      renderTopicBar();
+      renderBoardFull();
+      applyWorkspaceView('padlets');
+      closeModal(el.teacherPanelModal);
+      showToast(
+        state.activeTaskFilter
+          ? `Mostrando solo respuestas a la tarea "${task.title}"`
+          : 'Filtro de tarea retirado',
+        'info'
+      );
+    } else if (action === 'edit') {
+      populateAssignmentForm(task, { isEditingActive: true, assignmentId: task.id });
+      el.taskTitleInput.focus();
+      showToast(`Tarea "${task.title}" cargada para editar`);
+    } else if (action === 'toggle-hide') {
+      if (task.isHidden) {
+        socket.emit(
+          'teacher:assignment:toggle-hide',
+          {
+            teacherToken: state.teacherToken,
+            assignmentId: task.id,
+            id: task.id,
+            hideLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast(`👁️ Tarea "${task.title}" republicada para alumnos`, 'success');
+            else showToast(ack?.error || 'Error al republicar la tarea', 'error');
+          }
+        );
+      } else {
+        if (linkedCount === 0) {
+          socket.emit(
+            'teacher:assignment:toggle-hide',
+            {
+              teacherToken: state.teacherToken,
+              assignmentId: task.id,
+              id: task.id,
+              hideLinkedPosts: false,
+            },
+            (ack) => {
+              if (ack?.ok) showToast(`🚫 Tarea "${task.title}" despublicada para alumnos`, 'info');
+              else showToast(ack?.error || 'Error al despublicar', 'error');
+            }
+          );
+        } else {
+          state.pendingCleanAssignmentId = task.id;
+          state.pendingCleanAssignmentAction = 'toggle-hide';
+          if (el.cleanModalTitle) el.cleanModalTitle.textContent = `Despublicar Tarea: "${task.title}"`;
+          if (el.cleanModalResponsesCount) el.cleanModalResponsesCount.textContent = String(linkedCount);
+          openModal(el.assignmentCleanModal);
+        }
+      }
+    } else if (action === 'delete') {
+      if (linkedCount === 0) {
+        if (window.confirm(`¿Eliminar permanentemente la tarea "${task.title}" del historial?`)) {
+          socket.emit(
+            'teacher:assignment:delete',
+            {
+              teacherToken: state.teacherToken,
+              assignmentId: task.id,
+              id: task.id,
+            },
+            (ack) => {
+              if (ack?.ok) showToast('Tarea eliminada del historial', 'success');
+              else showToast(ack?.error || 'Error al eliminar tarea', 'error');
+            }
+          );
+        }
+      } else {
+        state.pendingCleanAssignmentId = task.id;
+        state.pendingCleanAssignmentAction = 'delete';
+        if (el.cleanModalTitle) el.cleanModalTitle.textContent = `Eliminar Tarea: "${task.title}"`;
+        if (el.cleanModalResponsesCount) el.cleanModalResponsesCount.textContent = String(linkedCount);
+        openModal(el.assignmentCleanModal);
+      }
     }
   });
 
@@ -1689,6 +1863,33 @@
         const uploaded = await uploadFile(state.taskSelectedFile);
         imageUrl = uploaded.imageUrl;
         imageName = uploaded.imageName;
+      }
+
+      if (state.editingAssignmentId) {
+        const ack = await new Promise((resolve) => {
+          socket.emit(
+            'teacher:assignment:update',
+            {
+              teacherToken: state.teacherToken,
+              id: state.editingAssignmentId,
+              assignmentId: state.editingAssignmentId,
+              title,
+              dueNote,
+              instructions,
+              imageUrl,
+              imageName,
+              pinned: el.taskPinnedCheck.checked,
+              author: authorName || 'Profesor',
+            },
+            resolve
+          );
+        });
+        if (!ack?.ok) throw new Error(ack?.error || 'No se pudo actualizar la tarea.');
+        state.editingAssignmentId = null;
+        resetAssignmentFormToNew();
+        closeModal(el.teacherPanelModal);
+        showToast('Tarea actualizada correctamente', 'success');
+        return;
       }
 
       const ack = await new Promise((resolve) => {
@@ -1723,8 +1924,20 @@
 
   el.btnClearAssignment.addEventListener('click', () => {
     if (!state.assignment) return;
+    const task = state.assignment;
+    const linkedCount = getPadletPosts().filter((p) => p.assignmentId === task.id).length;
+    if (linkedCount > 0) {
+      state.pendingCleanAssignmentId = task.id;
+      state.pendingCleanAssignmentAction = 'toggle-hide';
+      if (el.cleanModalTitle) el.cleanModalTitle.textContent = `Retirar Tarea Activa: "${task.title}"`;
+      if (el.cleanModalResponsesCount) el.cleanModalResponsesCount.textContent = String(linkedCount);
+      openModal(el.assignmentCleanModal);
+      return;
+    }
     socket.emit('teacher:assignment:clear', { teacherToken: state.teacherToken }, (ack) => {
       if (ack?.ok) {
+        state.isEditingActiveAssignment = false;
+        state.expandedTaskId = null;
         resetAssignmentFormToNew();
         showToast('Tarea actual archivada y ocultada');
       } else {
@@ -1732,6 +1945,127 @@
       }
     });
   });
+
+  // Clean / Unpublish Modal Action Handlers
+  if (el.btnCleanHideResponses) {
+    el.btnCleanHideResponses.addEventListener('click', () => {
+      const taskId = state.pendingCleanAssignmentId;
+      const action = state.pendingCleanAssignmentAction;
+      if (!taskId) return;
+      closeModal(el.assignmentCleanModal);
+      if (action === 'delete') {
+        socket.emit(
+          'teacher:assignment:delete',
+          {
+            teacherToken: state.teacherToken,
+            assignmentId: taskId,
+            id: taskId,
+            hideLinkedPosts: true,
+            deleteLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast('Tarea eliminada y respuestas despublicadas para alumnos', 'info');
+            else showToast(ack?.error || 'Error al procesar tarea', 'error');
+          }
+        );
+      } else {
+        socket.emit(
+          'teacher:assignment:toggle-hide',
+          {
+            teacherToken: state.teacherToken,
+            assignmentId: taskId,
+            id: taskId,
+            hideLinkedPosts: true,
+            deleteLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast('🚫 Tarea despublicada y respuestas ocultas para alumnos', 'info');
+            else showToast(ack?.error || 'Error al despublicar', 'error');
+          }
+        );
+      }
+    });
+  }
+
+  if (el.btnCleanKeepResponses) {
+    el.btnCleanKeepResponses.addEventListener('click', () => {
+      const taskId = state.pendingCleanAssignmentId;
+      const action = state.pendingCleanAssignmentAction;
+      if (!taskId) return;
+      closeModal(el.assignmentCleanModal);
+      if (action === 'delete') {
+        socket.emit(
+          'teacher:assignment:delete',
+          {
+            teacherToken: state.teacherToken,
+            assignmentId: taskId,
+            id: taskId,
+            deleteLinkedPosts: false,
+            hideLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast('Tarea eliminada; respuestas conservadas en el panel', 'info');
+            else showToast(ack?.error || 'Error al procesar tarea', 'error');
+          }
+        );
+      } else {
+        socket.emit(
+          'teacher:assignment:toggle-hide',
+          {
+            teacherToken: state.teacherToken,
+            assignmentId: taskId,
+            id: taskId,
+            hideLinkedPosts: false,
+            deleteLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast('🚫 Tarea despublicada; respuestas visibles en el panel', 'info');
+            else showToast(ack?.error || 'Error al despublicar', 'error');
+          }
+        );
+      }
+    });
+  }
+
+  if (el.btnCleanDeleteResponses) {
+    el.btnCleanDeleteResponses.addEventListener('click', () => {
+      const taskId = state.pendingCleanAssignmentId;
+      const action = state.pendingCleanAssignmentAction;
+      if (!taskId) return;
+      closeModal(el.assignmentCleanModal);
+      if (action === 'delete') {
+        socket.emit(
+          'teacher:assignment:delete',
+          {
+            teacherToken: state.teacherToken,
+            assignmentId: taskId,
+            id: taskId,
+            deleteLinkedPosts: true,
+            hideLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast('🗑️ Tarea y respuestas eliminadas permanentemente', 'success');
+            else showToast(ack?.error || 'Error al procesar tarea', 'error');
+          }
+        );
+      } else {
+        socket.emit(
+          'teacher:assignment:toggle-hide',
+          {
+            teacherToken: state.teacherToken,
+            assignmentId: taskId,
+            id: taskId,
+            deleteLinkedPosts: true,
+            hideLinkedPosts: false,
+          },
+          (ack) => {
+            if (ack?.ok) showToast('🚫 Tarea despublicada y respuestas eliminadas del panel', 'success');
+            else showToast(ack?.error || 'Error al despublicar', 'error');
+          }
+        );
+      }
+    });
+  }
 
   // --- Teacher Notifications (Send + Receive + History) ---
   document.querySelectorAll('.quick-chip').forEach((chip) => {
@@ -2201,9 +2535,104 @@
       } else {
         el.otherInterfacesBox.classList.add('hidden');
       }
+
+      refreshTunnelStatus();
     } catch (err) {
       console.warn('No se pudo obtener /api/info:', err);
     }
+  }
+
+  // --- Cloudflare Quick Tunnel Management ---
+  function updateTunnelUI(status) {
+    if (!el.tunnelStatusBadge) return;
+    const active = Boolean(status?.active);
+    const running = Boolean(status?.running);
+    const url = status?.url || '';
+    const err = status?.error || '';
+
+    if (active && url) {
+      el.tunnelStatusBadge.textContent = 'En línea (Público)';
+      el.tunnelStatusBadge.style.background = '#16a34a';
+      el.tunnelStatusBadge.style.color = '#fff';
+      if (el.tunnelActiveBox) el.tunnelActiveBox.classList.remove('hidden');
+      if (el.inputTunnelUrl) el.inputTunnelUrl.value = url;
+      if (el.imgTunnelQr) el.imgTunnelQr.src = '/qr?text=' + encodeURIComponent(url);
+      if (el.btnToggleTunnel) {
+        el.btnToggleTunnel.textContent = '⏹ Detener túnel Cloudflare';
+        el.btnToggleTunnel.className = 'btn btn-sm btn-danger';
+        el.btnToggleTunnel.disabled = false;
+      }
+      if (el.tunnelErrorBox) el.tunnelErrorBox.classList.add('hidden');
+    } else if (running && !url) {
+      el.tunnelStatusBadge.textContent = 'Iniciando túnel...';
+      el.tunnelStatusBadge.style.background = '#f59e0b';
+      el.tunnelStatusBadge.style.color = '#fff';
+      if (el.tunnelActiveBox) el.tunnelActiveBox.classList.add('hidden');
+      if (el.btnToggleTunnel) {
+        el.btnToggleTunnel.textContent = '⏳ Conectando...';
+        el.btnToggleTunnel.disabled = true;
+      }
+      if (el.tunnelErrorBox) el.tunnelErrorBox.classList.add('hidden');
+    } else {
+      el.tunnelStatusBadge.textContent = 'Detenido';
+      el.tunnelStatusBadge.style.background = '#94a3b8';
+      el.tunnelStatusBadge.style.color = '#fff';
+      if (el.tunnelActiveBox) el.tunnelActiveBox.classList.add('hidden');
+      if (el.btnToggleTunnel) {
+        el.btnToggleTunnel.textContent = '▶ Iniciar túnel Cloudflare';
+        el.btnToggleTunnel.className = 'btn btn-sm btn-primary';
+        el.btnToggleTunnel.disabled = false;
+      }
+      if (err && el.tunnelErrorBox) {
+        el.tunnelErrorBox.textContent = 'Error: ' + err;
+        el.tunnelErrorBox.classList.remove('hidden');
+      } else if (el.tunnelErrorBox) {
+        el.tunnelErrorBox.classList.add('hidden');
+      }
+    }
+  }
+
+  async function refreshTunnelStatus() {
+    try {
+      const res = await fetch('/api/tunnel');
+      if (res.ok) {
+        const data = await res.json();
+        updateTunnelUI(data);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (el.btnToggleTunnel) {
+    el.btnToggleTunnel.addEventListener('click', () => {
+      el.btnToggleTunnel.disabled = true;
+      socket.emit('teacher:tunnel:toggle', { teacherToken: state.teacherToken }, (res) => {
+        el.btnToggleTunnel.disabled = false;
+        if (!res?.ok) {
+          showToast(res?.error || 'No se pudo cambiar estado del túnel', 'error');
+        } else {
+          updateTunnelUI(res.status);
+          showToast(
+            res.status?.active ? '☁️ Túnel Cloudflare iniciado con éxito' : 'Túnel detenido',
+            res.status?.active ? 'success' : 'info'
+          );
+        }
+      });
+    });
+  }
+
+  if (el.btnCopyTunnelUrl) {
+    el.btnCopyTunnelUrl.addEventListener('click', async () => {
+      const url = el.inputTunnelUrl ? el.inputTunnelUrl.value : '';
+      if (!url) return;
+      try {
+        await copyTextToClipboard(url);
+        showToast('Enlace de Cloudflare copiado al portapapeles', 'success');
+      } catch {
+        showToast('No se pudo copiar el enlace', 'error');
+      }
+    });
   }
 
   loadServerInfo();
@@ -2447,17 +2876,40 @@
     socket.emit('teacher:screen-queue:clear', { teacherToken: state.teacherToken });
   });
 
+  function matchesScreenFilters(post) {
+    if (!isScreenPost(post)) return false;
+    const q = (state.screenSearchQuery || '').trim().toLowerCase();
+    if (q) {
+      const haystack = `${post.author || ''} ${post.topic || ''} ${post.content || ''}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  }
+
   function renderScreensGrid() {
-    const screens = getScreenPosts();
+    const allScreens = getScreenPosts();
+    const screens = allScreens.filter(matchesScreenFilters);
     el.screensGrid.innerHTML = '';
 
-    if (screens.length === 0) {
+    if (allScreens.length === 0) {
       el.screensEmptyState.classList.remove('hidden');
       updateWorkspaceTabBadges();
       return;
     }
 
     el.screensEmptyState.classList.add('hidden');
+
+    if (screens.length === 0) {
+      const noResults = document.createElement('div');
+      noResults.className = 'screens-no-results';
+      noResults.style.cssText = 'grid-column: 1 / -1; text-align: center; padding: 36px 16px; color: var(--text-muted); font-size: 0.95rem;';
+      noResults.innerHTML = `🔍 No se encontraron pantallas compartidas que coincidan con "<strong>${escapeHtml(state.screenSearchQuery)}</strong>".`;
+      el.screensGrid.appendChild(noResults);
+      updateScreensDensity();
+      updateWorkspaceTabBadges();
+      return;
+    }
+
     const fragment = document.createDocumentFragment();
     screens.forEach((post) => {
       fragment.appendChild(buildCardElement(post));
@@ -2473,6 +2925,13 @@
 
     updateScreensDensity();
     updateWorkspaceTabBadges();
+  }
+
+  if (el.screenSearchInput) {
+    el.screenSearchInput.addEventListener('input', (e) => {
+      state.screenSearchQuery = e.target.value;
+      renderScreensGrid();
+    });
   }
 
   // --- Multi-Session Class Management, Session Picker & Clean/Reset Controls ---
@@ -3020,6 +3479,10 @@
     el.onlineCount.textContent = String(count || 1);
   });
 
+  socket.on('tunnel:status', (status) => {
+    updateTunnelUI(status);
+  });
+
   socket.on('assignment:updated', ({ assignment, assignmentHistory }) => {
     state.assignment = assignment || null;
     if (Array.isArray(assignmentHistory)) {
@@ -3360,6 +3823,16 @@
   function matchesCurrentFilters(post) {
     if (isScreenPost(post)) return false;
 
+    // Filter by specific assignment responses
+    if (state.activeTaskFilter) {
+      if (post.assignmentId !== state.activeTaskFilter) return false;
+    }
+
+    // Filter by user / author
+    if (state.activeAuthor) {
+      if ((post.author || '').trim().toLowerCase() !== state.activeAuthor.trim().toLowerCase()) return false;
+    }
+
     if (state.activeTopic === '__HIGHLIGHTED__') {
       if (!post.highlighted) return false;
     } else if (state.activeTopic === '__REVIEWED__') {
@@ -3367,12 +3840,12 @@
     } else if (state.activeTopic === '__UNREVIEWED__') {
       if (post.reviewed) return false;
     } else if (state.activeTopic !== '__ALL__') {
-      if (post.topic.toLowerCase() !== state.activeTopic.toLowerCase()) return false;
+      if ((post.topic || '').toLowerCase() !== state.activeTopic.toLowerCase()) return false;
     }
 
     const q = state.searchQuery.trim().toLowerCase();
     if (q) {
-      const haystack = `${post.author} ${post.topic} ${post.content}`.toLowerCase();
+      const haystack = `${post.author || ''} ${post.topic || ''} ${post.content || ''} ${post.assignmentTitle || ''}`.toLowerCase();
       if (!haystack.includes(q)) return false;
     }
 
@@ -3381,78 +3854,121 @@
 
   function renderTopicBar() {
     const padlets = getPadletPosts();
-    const topicCounts = new Map();
+    const authorCounts = new Map();
     let reviewedCount = 0;
     let highlightedCount = 0;
 
     padlets.forEach((p) => {
       if (p.reviewed) reviewedCount++;
       if (p.highlighted) highlightedCount++;
-      const key = p.topic.trim();
-      if (!key) return;
-      const lower = key.toLowerCase();
-      const prev = topicCounts.get(lower);
+      const rawAuthor = (p.author || 'Anónimo').trim();
+      if (!rawAuthor) return;
+      const lower = rawAuthor.toLowerCase();
+      const prev = authorCounts.get(lower);
       if (prev) {
         prev.count++;
       } else {
-        topicCounts.set(lower, { label: key, count: 1 });
+        authorCounts.set(lower, {
+          name: rawAuthor,
+          count: 1,
+          isTeacher: Boolean(p.authorIsTeacher),
+        });
       }
     });
 
     const unreviewedCount = padlets.length - reviewedCount;
 
-    el.topicSuggestions.innerHTML = Array.from(topicCounts.values())
-      .map((t) => `<option value="${escapeHtml(t.label)}"></option>`)
-      .join('');
-
-    if (
-      state.activeTopic !== '__ALL__' &&
-      state.activeTopic !== '__HIGHLIGHTED__' &&
-      state.activeTopic !== '__REVIEWED__' &&
-      state.activeTopic !== '__UNREVIEWED__' &&
-      !topicCounts.has(state.activeTopic.toLowerCase())
-    ) {
-      state.activeTopic = '__ALL__';
+    // Autocomplete suggestions for topics
+    const uniqueTopics = Array.from(new Set(padlets.map((p) => (p.topic || '').trim()).filter(Boolean)));
+    if (el.topicSuggestions) {
+      el.topicSuggestions.innerHTML = uniqueTopics
+        .map((t) => `<option value="${escapeHtml(t)}"></option>`)
+        .join('');
     }
 
     const pills = [];
+
+    // Filter for Active Task Responses if selected
+    if (state.activeTaskFilter) {
+      const taskCount = padlets.filter((p) => p.assignmentId === state.activeTaskFilter).length;
+      let taskLabel = 'Tarea';
+      const foundTask =
+        (state.assignmentHistory || []).find((h) => h.id === state.activeTaskFilter) ||
+        (state.assignment?.id === state.activeTaskFilter ? state.assignment : null);
+      if (foundTask?.title) {
+        taskLabel = foundTask.title;
+      } else {
+        const sample = padlets.find((p) => p.assignmentId === state.activeTaskFilter);
+        if (sample?.assignmentTitle) taskLabel = sample.assignmentTitle;
+      }
+      pills.push(
+        `<button type="button" class="topic-pill active" data-action="clear-task-filter" style="border-color:var(--primary);background:rgba(99,102,241,0.15);color:var(--primary);font-weight:600;" title="Clic para quitar filtro de tarea">📝 ${escapeHtml(taskLabel.slice(0, 24))} <span class="pill-count">${taskCount}</span> <span style="margin-left:4px;font-size:0.75rem;">✕</span></button>`
+      );
+    }
+
+    const isAllActive = !state.activeAuthor && state.activeTopic === '__ALL__' && !state.activeTaskFilter;
     pills.push(
-      `<button type="button" class="topic-pill ${state.activeTopic === '__ALL__' ? 'active' : ''}" data-topic="__ALL__">Todos <span class="pill-count">${padlets.length}</span></button>`
+      `<button type="button" class="topic-pill ${isAllActive ? 'active' : ''}" data-topic="__ALL__">Todos <span class="pill-count">${padlets.length}</span></button>`
     );
 
     if (padlets.length > 0 && (state.isTeacher || highlightedCount > 0)) {
       pills.push(
-        `<button type="button" class="topic-pill ${state.activeTopic === '__HIGHLIGHTED__' ? 'active' : ''}" data-topic="__HIGHLIGHTED__">⭐ Destacadas <span class="pill-count">${highlightedCount}</span></button>`
+        `<button type="button" class="topic-pill ${!state.activeAuthor && state.activeTopic === '__HIGHLIGHTED__' ? 'active' : ''}" data-topic="__HIGHLIGHTED__">⭐ Destacadas <span class="pill-count">${highlightedCount}</span></button>`
       );
     }
 
     if (padlets.length > 0 && (state.isTeacher || reviewedCount > 0)) {
       pills.push(
-        `<button type="button" class="topic-pill ${state.activeTopic === '__UNREVIEWED__' ? 'active' : ''}" data-topic="__UNREVIEWED__">Pendientes <span class="pill-count">${unreviewedCount}</span></button>`
+        `<button type="button" class="topic-pill ${!state.activeAuthor && state.activeTopic === '__UNREVIEWED__' ? 'active' : ''}" data-topic="__UNREVIEWED__">Pendientes <span class="pill-count">${unreviewedCount}</span></button>`
       );
       pills.push(
-        `<button type="button" class="topic-pill ${state.activeTopic === '__REVIEWED__' ? 'active' : ''}" data-topic="__REVIEWED__">✓ Revisadas <span class="pill-count">${reviewedCount}</span></button>`
+        `<button type="button" class="topic-pill ${!state.activeAuthor && state.activeTopic === '__REVIEWED__' ? 'active' : ''}" data-topic="__REVIEWED__">✓ Revisadas <span class="pill-count">${reviewedCount}</span></button>`
       );
     }
 
-    for (const { label, count } of topicCounts.values()) {
-      const isActive =
-        state.activeTopic !== '__ALL__' &&
-        state.activeTopic !== '__HIGHLIGHTED__' &&
-        state.activeTopic !== '__REVIEWED__' &&
-        state.activeTopic !== '__UNREVIEWED__' &&
-        state.activeTopic.toLowerCase() === label.toLowerCase();
+    // List of Users / Authors with publication count, sorted by highest count
+    const sortedAuthors = Array.from(authorCounts.values()).sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name)
+    );
+
+    for (const { name, count, isTeacher } of sortedAuthors) {
+      const isAuthorActive =
+        Boolean(state.activeAuthor) && state.activeAuthor.toLowerCase() === name.toLowerCase();
       pills.push(
-        `<button type="button" class="topic-pill ${isActive ? 'active' : ''}" data-topic="${escapeHtml(label)}">${escapeHtml(label)} <span class="pill-count">${count}</span></button>`
+        `<button type="button" class="topic-pill author-pill ${isAuthorActive ? 'active' : ''}" data-author="${escapeHtml(name)}" title="Filtrar publicaciones de ${escapeHtml(name)}">${isTeacher ? '🎓' : '👤'} ${escapeHtml(name)} <span class="pill-count">${count}</span></button>`
       );
     }
 
     el.topicBar.innerHTML = pills.join('');
     el.topicBar.querySelectorAll('.topic-pill').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.activeTopic = btn.dataset.topic;
-        renderTopicBar();
-        renderBoardFull();
+        if (btn.dataset.action === 'clear-task-filter') {
+          state.activeTaskFilter = null;
+          renderTopicBar();
+          renderBoardFull();
+          return;
+        }
+
+        if (btn.dataset.author) {
+          const authorVal = btn.dataset.author;
+          if (state.activeAuthor && state.activeAuthor.toLowerCase() === authorVal.toLowerCase()) {
+            state.activeAuthor = null;
+          } else {
+            state.activeAuthor = authorVal;
+            state.activeTopic = '__ALL__';
+          }
+          renderTopicBar();
+          renderBoardFull();
+          return;
+        }
+
+        if (btn.dataset.topic) {
+          state.activeAuthor = null;
+          state.activeTaskFilter = null;
+          state.activeTopic = btn.dataset.topic;
+          renderTopicBar();
+          renderBoardFull();
+        }
       });
     });
   }
@@ -3795,6 +4311,13 @@
         <div class="card-topic-row">
           <h3 class="card-topic">${escapeHtml(post.topic)}</h3>
           <div class="card-badges-row" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+            ${
+              post.assignmentTitle
+                ? `<span class="assignment-ref-badge" data-action="filter-assignment-ref" data-assignment-id="${escapeHtml(
+                    post.assignmentId || ''
+                  )}" title="Clic para ver solo respuestas a esta tarea">📝 Tarea: ${escapeHtml(post.assignmentTitle)}</span>`
+                : ''
+            }
             ${post.highlighted ? '<span class="highlighted-tag" title="Respuesta destacada">⭐ Destacada</span>' : ''}
             ${post.isHidden ? '<span class="hidden-tag" title="Despublicada para los alumnos">🚫 Despublicada</span>' : ''}
             ${reviewedBadge}
@@ -4054,6 +4577,13 @@
     }
     if (el.postDetailBadges) {
       const badges = [];
+      if (post.assignmentTitle) {
+        badges.push(
+          `<span class="assignment-ref-badge" style="cursor:default;" title="Respuesta a una tarea">📝 Tarea: ${escapeHtml(
+            post.assignmentTitle
+          )}</span>`
+        );
+      }
       if (post.highlighted) badges.push('<span class="highlighted-tag">⭐ Destacada</span>');
       if (post.reviewed) {
         badges.push(
@@ -4221,6 +4751,15 @@
 
     if (action === 'shrink-card') {
       setFocusedCard(null);
+    } else if (action === 'filter-assignment-ref') {
+      const asgnId = actionEl.dataset.assignmentId;
+      if (asgnId) {
+        state.activeTaskFilter = state.activeTaskFilter === asgnId ? null : asgnId;
+        state.activeAuthor = null;
+        state.activeTopic = '__ALL__';
+        renderTopicBar();
+        renderBoardFull();
+      }
     } else if (action === 'open-post-detail') {
       openPostDetailModal(post);
     } else if (action === 'highlight-post') {
@@ -4837,6 +5376,12 @@
     state.existingImageUrl = null;
     state.existingImageName = null;
     state.removeExistingImage = false;
+    state.composerAssignmentId = null;
+    state.composerAssignmentTitle = null;
+    if (el.composerAssignmentId) el.composerAssignmentId.value = '';
+    if (el.composerAssignmentRefTitle) el.composerAssignmentRefTitle.textContent = '';
+    if (el.composerAssignmentTitle) el.composerAssignmentTitle.textContent = '';
+    if (el.composerAssignmentRefBox) el.composerAssignmentRefBox.classList.add('hidden');
     el.inputImage.value = '';
     showImagePreview(null);
     selectColor('default');
@@ -4875,6 +5420,14 @@
     state.existingImageName = post.imageName || null;
     if (post.imageUrl) {
       showImagePreview(post.imageUrl);
+    }
+    if (post.assignmentId && post.assignmentTitle) {
+      state.composerAssignmentId = post.assignmentId;
+      state.composerAssignmentTitle = post.assignmentTitle;
+      if (el.composerAssignmentId) el.composerAssignmentId.value = post.assignmentId;
+      if (el.composerAssignmentRefTitle) el.composerAssignmentRefTitle.textContent = post.assignmentTitle;
+      if (el.composerAssignmentTitle) el.composerAssignmentTitle.textContent = post.assignmentTitle;
+      if (el.composerAssignmentRefBox) el.composerAssignmentRefBox.classList.remove('hidden');
     }
     selectColor(post.color || 'default');
     openModal(el.composerModal);
@@ -5045,6 +5598,8 @@
               imageUrl: uploaded ? uploaded.imageUrl : state.existingImageUrl,
               imageName: uploaded ? uploaded.imageName : state.existingImageName,
               removeImage: state.removeExistingImage && !uploaded,
+              assignmentId: state.composerAssignmentId || null,
+              assignmentTitle: state.composerAssignmentTitle || null,
             },
             resolve
           );
@@ -5066,6 +5621,8 @@
               color: state.selectedColor,
               imageUrl: uploaded ? uploaded.imageUrl : null,
               imageName: uploaded ? uploaded.imageName : null,
+              assignmentId: state.composerAssignmentId || null,
+              assignmentTitle: state.composerAssignmentTitle || null,
             },
             resolve
           );
