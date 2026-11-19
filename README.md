@@ -16,39 +16,33 @@ Todos los textos, preguntas, tareas, imágenes y respuestas quedan almacenados d
 
 ---
 
-## 📸 Galería y Capturas del Sistema
+## 📸 Galería y Capturas de Pantalla del Sistema
 
-A continuación puedes apreciar la interfaz moderna e interactiva de **PadletLocal**:
+A continuación puedes apreciar la interfaz moderna e interactiva de **PadletLocal** en acción:
 
 <div align="center">
 
-### 📋 1. Pizarra Colaborativa en Tiempo Real
-*Publicaciones organizadas, temas de tareas activas, reloj de clase, buscador rápido y modo compacto.*  
-![Pizarra Colaborativa PadletLocal](docs/screenshots/01-pizarra-principal.png)
+### 📋 1. Pizarra Colaborativa en Tiempo Real y Tareas
+*Publicaciones organizadas con autor, temas, badges oficiales del profesor, reloj ampliado de clase y buscador instantáneo.*  
+![Pizarra Principal PadletLocal](capturas/img1.png)
 
 <br/>
 
 ### 🖥️ 2. Transmisión de Pantalla en Vivo (WebRTC) y Cola de Turnos
-*Pantallas en tiempo real con prioridad docente, re-encolado ágil y selector de audiencia.*  
-![Transmisión de Pantalla WebRTC](docs/screenshots/02-pantalla-compartida-webrtc.png)
+*Espacio de transmisión directa en red local con prioridad docente, orden de pantallas y re-encolado ágil para alumnos.*  
+![Pantalla Compartida y Cola WebRTC](capturas/img2.png)
 
 <br/>
 
 ### 💬 3. Chat Interactivo en Vivo de la Sesión
-*Mensajería fluida simultánea con la pizarra, sin bloqueos de pantalla, con canales públicos y privados.*  
-![Chat en Vivo PadletLocal](docs/screenshots/03-chat-en-vivo-drawer.png)
+*Drawer lateral flotante que no bloquea la navegación en el tablero, con mensajes públicos, privados y alertas sonoras.*  
+![Chat en Vivo PadletLocal](capturas/img3.png)
 
 <br/>
 
-### 🧠 4. Evaluaciones, Quizzes y Estadísticas Docentes
-*Cuestionarios con temporizador dinámico y métricas de acierto por pregunta exclusivas para el docente.*  
-![Evaluaciones y Quizzes](docs/screenshots/04-evaluaciones-quizzes.png)
-
-<br/>
-
-### ⚙️ 5. Panel de Control y Moderación Docente
-*Gestión de múltiples sesiones, control de participantes (expulsión y deshabilitación) y backup seguro.*  
-![Panel Docente](docs/screenshots/05-panel-docente-gestion.png)
+### 🧠 4. Evaluaciones, Quizzes y Panel de Control
+*Creación y control de evaluaciones en vivo, estadísticas de acierto para el profesor y gestión de participantes.*  
+![Evaluaciones y Panel de Control](capturas/img4.png)
 
 </div>
 
