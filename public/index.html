@@ -900,8 +900,40 @@
           </div>
 
           <div class="form-group">
-            <label for="taskInstructionsInput">Información e instrucciones (puedes pegar texto, enlaces o consignas)</label>
-            <textarea id="taskInstructionsInput" rows="5" maxlength="6000" placeholder="Escribe o pega aquí la consigna, pasos, enlaces de referencia o criterios de evaluación..."></textarea>
+            <label for="taskInstructionsInput">Información e instrucciones (con editor de formato — se respetan espacios, saltos de línea y emojis)</label>
+            <div class="rich-editor-toolbar" data-for="taskInstructionsInput">
+              <div class="toolbar-btn-group">
+                <button type="button" class="fmt-btn" data-format="bold" title="Negrita (**texto**)"><strong>B</strong></button>
+                <button type="button" class="fmt-btn" data-format="italic" title="Cursiva (*texto*)"><em>I</em></button>
+                <button type="button" class="fmt-btn" data-format="underline" title="Subrayado (<u>texto</u>)"><u>U</u></button>
+                <button type="button" class="fmt-btn" data-format="strike" title="Tachado (~~texto~~)"><del>S</del></button>
+              </div>
+              <div class="toolbar-btn-group">
+                <button type="button" class="fmt-btn" data-format="heading" title="Título / Encabezado (### Título)">H</button>
+                <button type="button" class="fmt-btn" data-format="list-ul" title="Lista con viñetas">• Lista</button>
+                <button type="button" class="fmt-btn" data-format="list-ol" title="Lista numerada">1. Lista</button>
+                <button type="button" class="fmt-btn" data-format="quote" title="Cita destacada">&gt; Cita</button>
+                <button type="button" class="fmt-btn" data-format="code" title="Código / Monoespaciado">&lt;/&gt;</button>
+              </div>
+              <div class="toolbar-btn-group emoji-group">
+                <button type="button" class="fmt-btn emoji-trigger" data-format="emoji-menu" title="Insertar Emojis">😊 Emojis ▾</button>
+                <div class="emoji-picker-menu hidden">
+                  <span class="emoji-chip" data-emoji="📌">📌</span>
+                  <span class="emoji-chip" data-emoji="📚">📚</span>
+                  <span class="emoji-chip" data-emoji="🎯">🎯</span>
+                  <span class="emoji-chip" data-emoji="💡">💡</span>
+                  <span class="emoji-chip" data-emoji="⭐">⭐</span>
+                  <span class="emoji-chip" data-emoji="🚀">🚀</span>
+                  <span class="emoji-chip" data-emoji="✅">✅</span>
+                  <span class="emoji-chip" data-emoji="📝">📝</span>
+                  <span class="emoji-chip" data-emoji="⏰">⏰</span>
+                  <span class="emoji-chip" data-emoji="👥">👥</span>
+                  <span class="emoji-chip" data-emoji="🔥">🔥</span>
+                  <span class="emoji-chip" data-emoji="✨">✨</span>
+                </div>
+              </div>
+            </div>
+            <textarea id="taskInstructionsInput" rows="5" maxlength="6000" placeholder="Escribe o pega aquí la consigna, pasos, enlaces de referencia o criterios de evaluación... (se respetan espacios, saltos de línea y emojis)"></textarea>
           </div>
 
           <div class="form-group">
@@ -975,7 +1007,36 @@
 
           <div class="form-group">
             <label for="notifyMessageInput">Mensaje para todos los conectados <span class="req">*</span></label>
-            <textarea id="notifyMessageInput" rows="3" maxlength="1000" placeholder="Escribe el anuncio que aparecerá en vivo en las pantallas de todos..." required></textarea>
+            <div class="rich-editor-toolbar" data-for="notifyMessageInput">
+              <div class="toolbar-btn-group">
+                <button type="button" class="fmt-btn" data-format="bold" title="Negrita (**texto**)"><strong>B</strong></button>
+                <button type="button" class="fmt-btn" data-format="italic" title="Cursiva (*texto*)"><em>I</em></button>
+                <button type="button" class="fmt-btn" data-format="underline" title="Subrayado (<u>texto</u>)"><u>U</u></button>
+              </div>
+              <div class="toolbar-btn-group">
+                <button type="button" class="fmt-btn" data-format="heading" title="Título / Encabezado (### Título)">H</button>
+                <button type="button" class="fmt-btn" data-format="list-ul" title="Lista con viñetas">• Lista</button>
+                <button type="button" class="fmt-btn" data-format="quote" title="Cita destacada">&gt; Cita</button>
+              </div>
+              <div class="toolbar-btn-group emoji-group">
+                <button type="button" class="fmt-btn emoji-trigger" data-format="emoji-menu" title="Insertar Emojis">😊 Emojis ▾</button>
+                <div class="emoji-picker-menu hidden">
+                  <span class="emoji-chip" data-emoji="📢">📢</span>
+                  <span class="emoji-chip" data-emoji="⚠️">⚠️</span>
+                  <span class="emoji-chip" data-emoji="🔔">🔔</span>
+                  <span class="emoji-chip" data-emoji="⏰">⏰</span>
+                  <span class="emoji-chip" data-emoji="✅">✅</span>
+                  <span class="emoji-chip" data-emoji="👏">👏</span>
+                  <span class="emoji-chip" data-emoji="📌">📌</span>
+                  <span class="emoji-chip" data-emoji="🎯">🎯</span>
+                  <span class="emoji-chip" data-emoji="⭐">⭐</span>
+                  <span class="emoji-chip" data-emoji="🔥">🔥</span>
+                  <span class="emoji-chip" data-emoji="💡">💡</span>
+                  <span class="emoji-chip" data-emoji="🎉">🎉</span>
+                </div>
+              </div>
+            </div>
+            <textarea id="notifyMessageInput" rows="3" maxlength="1000" placeholder="Escribe el anuncio que aparecerá en vivo en las pantallas de todos... (se respetan espacios, saltos de línea y emojis)" required></textarea>
           </div>
 
           <label class="checkbox-label">
@@ -1251,8 +1312,46 @@
         </div>
 
         <div class="form-group">
-          <label for="inputContent">Contenido</label>
-          <textarea id="inputContent" rows="4" maxlength="3000" placeholder="Escribe tus ideas, enlaces o notas... (también puedes pegar una imagen con Ctrl+V)"></textarea>
+          <label for="inputContent">Contenido (con editor de formato — se respetan espacios, saltos de línea y emojis)</label>
+          <div class="rich-editor-toolbar" data-for="inputContent">
+            <div class="toolbar-btn-group">
+              <button type="button" class="fmt-btn" data-format="bold" title="Negrita (**texto**)"><strong>B</strong></button>
+              <button type="button" class="fmt-btn" data-format="italic" title="Cursiva (*texto*)"><em>I</em></button>
+              <button type="button" class="fmt-btn" data-format="underline" title="Subrayado (<u>texto</u>)"><u>U</u></button>
+              <button type="button" class="fmt-btn" data-format="strike" title="Tachado (~~texto~~)"><del>S</del></button>
+            </div>
+            <div class="toolbar-btn-group">
+              <button type="button" class="fmt-btn" data-format="heading" title="Título / Encabezado (### Título)">H</button>
+              <button type="button" class="fmt-btn" data-format="list-ul" title="Lista con viñetas">• Lista</button>
+              <button type="button" class="fmt-btn" data-format="list-ol" title="Lista numerada">1. Lista</button>
+              <button type="button" class="fmt-btn" data-format="quote" title="Cita destacada">&gt; Cita</button>
+              <button type="button" class="fmt-btn" data-format="code" title="Código / Monoespaciado">&lt;/&gt;</button>
+            </div>
+            <div class="toolbar-btn-group emoji-group">
+              <button type="button" class="fmt-btn emoji-trigger" data-format="emoji-menu" title="Insertar Emojis">😊 Emojis ▾</button>
+              <div class="emoji-picker-menu hidden">
+                <span class="emoji-chip" data-emoji="😀">😀</span>
+                <span class="emoji-chip" data-emoji="👍">👍</span>
+                <span class="emoji-chip" data-emoji="⭐">⭐</span>
+                <span class="emoji-chip" data-emoji="💡">💡</span>
+                <span class="emoji-chip" data-emoji="📌">📌</span>
+                <span class="emoji-chip" data-emoji="🎯">🎯</span>
+                <span class="emoji-chip" data-emoji="🚀">🚀</span>
+                <span class="emoji-chip" data-emoji="📚">📚</span>
+                <span class="emoji-chip" data-emoji="❤️">❤️</span>
+                <span class="emoji-chip" data-emoji="👏">👏</span>
+                <span class="emoji-chip" data-emoji="🔥">🔥</span>
+                <span class="emoji-chip" data-emoji="✨">✨</span>
+                <span class="emoji-chip" data-emoji="🎉">🎉</span>
+                <span class="emoji-chip" data-emoji="📝">📝</span>
+                <span class="emoji-chip" data-emoji="✅">✅</span>
+                <span class="emoji-chip" data-emoji="❌">❌</span>
+                <span class="emoji-chip" data-emoji="❓">❓</span>
+                <span class="emoji-chip" data-emoji="❗">❗</span>
+              </div>
+            </div>
+          </div>
+          <textarea id="inputContent" rows="4" maxlength="4000" placeholder="Escribe tus ideas, enlaces o notas... (se respetan espacios, saltos de línea y emojis; también puedes pegar una imagen con Ctrl+V)"></textarea>
         </div>
 
         <div class="form-group">

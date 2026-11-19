@@ -50,12 +50,39 @@
   }
 
   function formatTextWithLinks(text) {
-    const escaped = escapeHtml(text);
+    if (!text) return '';
+    let escaped = escapeHtml(text);
+
+    // 1. URLs to clickable links
     const urlRegex = /(https?:\/\/[^\s<]+)/g;
-    return escaped.replace(
+    escaped = escaped.replace(
       urlRegex,
       '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
     );
+
+    // 2. Headings: lines starting with ### or ## or #
+    escaped = escaped.replace(/^(#{1,3})\s+(.+)$/gm, '<strong class="fmt-heading">$2</strong>');
+
+    // 3. Bold: **text**
+    escaped = escaped.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+
+    // 4. Italic: *text* (excluding standalone stars or code)
+    escaped = escaped.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+
+    // 5. Underline: <u>text</u> or __text__
+    escaped = escaped.replace(/&lt;u&gt;(.*?)&lt;\/u&gt;/gi, '<u>$1</u>');
+    escaped = escaped.replace(/__([^_\n]+?)__/g, '<u>$1</u>');
+
+    // 6. Strikethrough: ~~text~~
+    escaped = escaped.replace(/~~([^~\n]+?)~~/g, '<del>$1</del>');
+
+    // 7. Inline code: `text`
+    escaped = escaped.replace(/`([^`\n]+)`/g, '<code class="fmt-code">$1</code>');
+
+    // 8. Quotes: lines starting with >
+    escaped = escaped.replace(/^&gt;\s*(.+)$/gm, '<span class="fmt-quote">▎ $1</span>');
+
+    return escaped;
   }
 
   function formatRelativeTime(isoString) {
@@ -937,6 +964,7 @@
     el.taskTitleInput.value = '';
     el.taskDueInput.value = '';
     el.taskInstructionsInput.value = '';
+    el.taskInstructionsInput.style.height = '';
     el.taskPinnedCheck.checked = true;
     el.taskNotifyCheck.checked = true;
     state.taskSelectedFile = null;
@@ -953,6 +981,7 @@
     el.taskTitleInput.value = assignment?.title || '';
     el.taskDueInput.value = assignment?.dueNote || '';
     el.taskInstructionsInput.value = assignment?.instructions || '';
+    autoResizeTextarea(el.taskInstructionsInput);
     el.taskPinnedCheck.checked = assignment ? assignment.pinned !== false : true;
     state.taskSelectedFile = null;
     state.taskExistingImageUrl = assignment?.imageUrl || null;
@@ -1086,6 +1115,9 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeActionMenus();
+      if (state.focusedCardId) {
+        setFocusedCard(null);
+      }
     }
   });
 
@@ -3619,7 +3651,7 @@
         </div>
         <div class="card-owner-actions">
           ${highlightButton}
-          <button type="button" class="icon-btn-subtle compact-shrink-btn" data-action="shrink-card" title="Volver al tamaño pequeño">⤡</button>
+          <button type="button" class="compact-shrink-btn" data-action="shrink-card" title="Volver al tamaño pequeño (Esc)">✕ Reducir (Esc)</button>
           ${ownerButtons}
         </div>
       `,
@@ -3857,10 +3889,10 @@
 
     const actionEl = e.target.closest('[data-action]');
     if (!actionEl) {
-      // If Padlets board is in compact mode and user clicked the card (not an interactive control), grow/shrink it!
+      // If clicked on a Padlet card (not an interactive control), grow / focus it!
       if (
         cardEl.parentElement === el.boardGrid &&
-        el.boardGrid.classList.contains('board-grid--compact') &&
+        !el.boardGrid.classList.contains('board-view--list') &&
         !e.target.closest('a, button, input, textarea, form, video')
       ) {
         setFocusedCard(postId);
@@ -4402,6 +4434,7 @@
     el.inputAuthor.disabled = false;
     el.inputTopic.value = '';
     el.inputContent.value = '';
+    el.inputContent.style.height = '';
     state.selectedFile = null;
     state.existingImageUrl = null;
     state.existingImageName = null;
@@ -4439,6 +4472,7 @@
     el.inputAuthor.disabled = true;
     el.inputTopic.value = post.topic;
     el.inputContent.value = post.content || '';
+    autoResizeTextarea(el.inputContent);
     state.existingImageUrl = post.imageUrl || null;
     state.existingImageName = post.imageName || null;
     if (post.imageUrl) {
@@ -4752,10 +4786,121 @@
     await triggerStartScreenShare(post);
   });
 
+  // --- Rich Text Formatting Editor Toolbar (preserves spaces, line heights & emojis) ---
+  function autoResizeTextarea(textarea) {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.max(76, Math.min(520, textarea.scrollHeight)) + 'px';
+  }
+
+  function insertFormatIntoTextarea(textarea, prefix, suffix = '', defaultText = '') {
+    if (!textarea) return;
+    textarea.focus();
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    const text = textarea.value;
+    const selected = text.substring(start, end) || defaultText;
+    const replacement = prefix + selected + suffix;
+
+    let applied = false;
+    try {
+      applied = document.execCommand('insertText', false, replacement);
+    } catch {}
+
+    if (!applied) {
+      textarea.value = text.substring(0, start) + replacement + text.substring(end);
+      textarea.selectionStart = start + prefix.length;
+      textarea.selectionEnd = start + prefix.length + selected.length;
+    }
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    autoResizeTextarea(textarea);
+  }
+
+  function applyFormatToTextarea(textarea, fmt) {
+    if (!textarea) return;
+    switch (fmt) {
+      case 'bold':
+        insertFormatIntoTextarea(textarea, '**', '**', 'texto en negrita');
+        break;
+      case 'italic':
+        insertFormatIntoTextarea(textarea, '*', '*', 'texto en cursiva');
+        break;
+      case 'underline':
+        insertFormatIntoTextarea(textarea, '<u>', '</u>', 'texto subrayado');
+        break;
+      case 'strike':
+        insertFormatIntoTextarea(textarea, '~~', '~~', 'texto tachado');
+        break;
+      case 'heading':
+        insertFormatIntoTextarea(textarea, '### ', '', 'Título');
+        break;
+      case 'list-ul':
+        insertFormatIntoTextarea(textarea, '• ', '', 'Elemento de lista');
+        break;
+      case 'list-ol':
+        insertFormatIntoTextarea(textarea, '1. ', '', 'Elemento numerado');
+        break;
+      case 'quote':
+        insertFormatIntoTextarea(textarea, '> ', '', 'Cita destacada');
+        break;
+      case 'code':
+        insertFormatIntoTextarea(textarea, '`', '`', 'código');
+        break;
+    }
+  }
+
+  function initRichEditorToolbars() {
+    document.querySelectorAll('.rich-editor-toolbar').forEach((toolbar) => {
+      const targetId = toolbar.dataset.for;
+      const textarea = document.getElementById(targetId);
+      if (!textarea) return;
+
+      // Auto-adapt textarea height to content on typing and pasting
+      textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+      textarea.addEventListener('paste', () => {
+        setTimeout(() => autoResizeTextarea(textarea), 0);
+      });
+
+      const emojiMenu = toolbar.querySelector('.emoji-picker-menu');
+      const emojiTrigger = toolbar.querySelector('.emoji-trigger');
+
+      if (emojiTrigger && emojiMenu) {
+        emojiTrigger.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          emojiMenu.classList.toggle('hidden');
+        });
+
+        emojiMenu.addEventListener('click', (e) => {
+          const chip = e.target.closest('.emoji-chip');
+          if (!chip) return;
+          const emoji = chip.dataset.emoji;
+          insertFormatIntoTextarea(textarea, emoji);
+          emojiMenu.classList.add('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!toolbar.contains(e.target)) {
+            emojiMenu.classList.add('hidden');
+          }
+        });
+      }
+
+      toolbar.querySelectorAll('.fmt-btn:not(.emoji-trigger)').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const fmt = btn.dataset.format;
+          applyFormatToTextarea(textarea, fmt);
+        });
+      });
+    });
+  }
+
   applyUiMode(state.uiMode);
   applyWorkspaceView(state.workspaceView);
   updateBoardDensity();
   updateScreensDensity();
+  initRichEditorToolbars();
 
   // --- Header & Toolbar Listeners ---
   el.btnNewPost?.addEventListener('click', () => openComposerForCreate());
