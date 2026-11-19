@@ -1612,8 +1612,8 @@
                 <input id="welcomeStudentName" type="text" maxlength="35" placeholder="Ej. Camila Morales" required />
               </div>
               <div class="form-group">
-                <label for="welcomeStudentSessionSelect">Sesión / Clase disponible <span class="req">*</span></label>
-                <select id="welcomeStudentSessionSelect" class="select-input" required>
+                <label for="welcomeStudentSessionSelect">Sesión / Clase disponible</label>
+                <select id="welcomeStudentSessionSelect" class="select-input">
                   <option value="">Cargando clases disponibles...</option>
                 </select>
               </div>
@@ -1640,6 +1640,7 @@
               <div class="form-group">
                 <label for="welcomeTeacherPin">PIN de Acceso Docente <span class="req">*</span></label>
                 <input id="welcomeTeacherPin" type="password" inputmode="numeric" maxlength="20" placeholder="Ingresa el PIN de profesor" required />
+                <small class="field-hint" style="color:var(--text-muted);font-size:0.75rem;margin-top:2px;display:block;">PIN predeterminado: <strong>1234</strong> (configurable en el panel).</small>
               </div>
               <div id="welcomeTeacherError" class="form-error hidden"></div>
               <button type="submit" id="btnEnterAsTeacher" class="btn btn-indigo btn-welcome-enter">

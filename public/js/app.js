@@ -386,6 +386,8 @@
     btnNetworkInfo: document.getElementById('btnNetworkInfo'),
     btnOpenScreenModal: document.getElementById('btnOpenScreenModal'),
     btnNewPost: document.getElementById('btnNewPost'),
+    fabNewPost: document.getElementById('fabNewPost'),
+    screenShareModalTitle: document.getElementById('screenShareModalTitle'),
     httpsBanner: document.getElementById('httpsBanner'),
     httpsBannerText: document.getElementById('httpsBannerText'),
     bannerBatLink: document.getElementById('bannerBatLink'),
@@ -1051,9 +1053,9 @@
   el.btnStudentMenuEditName?.addEventListener('click', () => {
     closeActionMenus();
     openModal(el.nameModal);
-    if (el.inputAuthorName) {
-      el.inputAuthorName.value = authorName;
-      el.inputAuthorName.select();
+    if (el.inputQuickName) {
+      el.inputQuickName.value = authorName;
+      el.inputQuickName.select();
     }
   });
 
@@ -4590,10 +4592,10 @@
   applyWorkspaceView(state.workspaceView);
 
   // --- Header & Toolbar Listeners ---
-  el.btnNewPost.addEventListener('click', () => openComposerForCreate());
-  el.fabNewPost.addEventListener('click', () => openComposerForCreate());
-  el.btnEmptyCreate.addEventListener('click', () => openComposerForCreate());
-  el.btnEmptyShare.addEventListener('click', () => openScreenShareModal());
+  el.btnNewPost?.addEventListener('click', () => openComposerForCreate());
+  el.fabNewPost?.addEventListener('click', () => openComposerForCreate());
+  el.btnEmptyCreate?.addEventListener('click', () => openComposerForCreate());
+  el.btnEmptyShare?.addEventListener('click', () => openScreenShareModal());
 
   el.btnNetworkInfo.addEventListener('click', async () => {
     await loadServerInfo();
@@ -4777,8 +4779,7 @@
       (s) => s.isPublished !== false && !s.hideFromStudents
     );
     if (accessible.length === 0) {
-      el.welcomeStudentSessionSelect.innerHTML =
-        '<option value="">(No hay clases habilitadas por el profesor en este momento)</option>';
+      el.welcomeStudentSessionSelect.innerHTML = `<option value="${escapeHtml(state.activeSessionId || '')}">Clase Principal</option>`;
       return;
     }
     el.welcomeStudentSessionSelect.innerHTML = accessible
@@ -4810,7 +4811,7 @@
     el.welcomeStudentForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const name = el.welcomeStudentName?.value?.trim();
-      const targetSessionId = el.welcomeStudentSessionSelect?.value;
+      const targetSessionId = el.welcomeStudentSessionSelect?.value || state.activeSessionId;
       if (!name) {
         showToast('Por favor escribe tu nombre de estudiante', 'error');
         el.welcomeStudentName?.focus();
@@ -4822,17 +4823,15 @@
       state.teacherToken = '';
       sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
       sessionStorage.setItem(STORAGE_ROLE_KEY, 'student');
+      state.hasChosenSession = true;
       updateTeacherUI();
       updateStudentMenuUI();
 
       if (targetSessionId && targetSessionId !== state.activeSessionId) {
-        state.hasChosenSession = true;
         socket.emit('session:join', { sessionId: targetSessionId, teacherToken: '' }, (ack) => {
           if (!ack?.ok) showToast(ack?.error || 'No se pudo entrar a la clase seleccionada', 'error');
           else showToast(`📚 Entraste a "${ack.snapshot?.board?.title || 'la clase'}"`, 'success');
         });
-      } else {
-        state.hasChosenSession = true;
       }
 
       socket.emit('client:register', {
@@ -4896,6 +4895,7 @@
         updateTeacherUI();
         closeModal(el.welcomeRoleModal);
         showToast(`🎓 ¡Bienvenido, ${state.teacherName}! Modo Docente activado.`, 'success');
+        openTeacherPanel('assignment');
       } catch {
         if (el.welcomeTeacherError) {
           el.welcomeTeacherError.textContent = 'No se pudo verificar el PIN.';
