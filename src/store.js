@@ -34,6 +34,9 @@ function createBlankSession({
     teacherName: teacherName ? String(teacherName).slice(0, 60) : null,
     board: {
       title: cleanName,
+      eventName: cleanName,
+      institutionName: 'Institución Educativa',
+      institutionLogo: '',
       description: cleanDesc,
     },
     posts: [],
@@ -60,6 +63,9 @@ function normalizeSession(raw) {
     teacherName: raw?.teacherName ? String(raw.teacherName).slice(0, 60) : null,
     board: {
       title: raw?.board?.title || fallbackName,
+      eventName: raw?.board?.eventName || raw?.board?.title || fallbackName,
+      institutionName: raw?.board?.institutionName || 'Institución Educativa',
+      institutionLogo: raw?.board?.institutionLogo || '',
       description: raw?.board?.description ?? DEFAULT_BOARD_DESC,
     },
     posts: Array.isArray(raw?.posts)
@@ -404,15 +410,32 @@ class BoardStore {
     return this.resolveSession(sessionId).board;
   }
 
-  updateBoard({ title, description }, sessionId = null) {
+  updateBoard(
+    { title, description, institutionName, institutionLogo, eventName },
+    sessionId = null
+  ) {
     const session = this.resolveSession(sessionId);
     if (typeof title === 'string' && title.trim()) {
       const cleanTitle = title.trim().slice(0, 80);
       session.board.title = cleanTitle;
       session.name = cleanTitle;
     }
+    if (typeof eventName === 'string' && eventName.trim()) {
+      const cleanEvent = eventName.trim().slice(0, 80);
+      session.board.eventName = cleanEvent;
+      if (!title || !title.trim()) {
+        session.board.title = cleanEvent;
+        session.name = cleanEvent;
+      }
+    }
     if (typeof description === 'string') {
       session.board.description = description.trim().slice(0, 220);
+    }
+    if (typeof institutionName === 'string') {
+      session.board.institutionName = institutionName.trim().slice(0, 100) || 'Institución Educativa';
+    }
+    if (typeof institutionLogo === 'string') {
+      session.board.institutionLogo = institutionLogo.trim().slice(0, 500);
     }
     this.save();
     return session.board;

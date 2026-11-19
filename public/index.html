@@ -44,19 +44,32 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <div class="brand-logo" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="9" rx="1.5" />
-            <rect x="14" y="3" width="7" height="5" rx="1.5" />
-            <rect x="14" y="12" width="7" height="9" rx="1.5" />
-            <rect x="3" y="16" width="7" height="5" rx="1.5" />
-          </svg>
+        <!-- Logo de la Institución que imparte las sesiones -->
+        <div class="brand-logo institution-logo-box" id="institutionLogoBox" title="Logo de la Institución que imparte las sesiones">
+          <img id="institutionLogoImg" class="institution-logo-img hidden" alt="Logo de la Institución" />
+          <div id="institutionLogoDefault" class="institution-logo-svg" aria-label="Logo de la Institución">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+              <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
+            </svg>
+          </div>
         </div>
+
         <div class="brand-text">
+          <div class="institution-meta-row">
+            <span class="institution-badge" id="institutionNameDisplay" title="Institución que imparte las sesiones">🏫 Institución Educativa</span>
+            <span class="meta-dot">·</span>
+            <span class="event-badge-pill" title="Evento en curso">
+              <span class="event-live-dot" aria-hidden="true"></span>
+              <span class="event-badge-label">Evento:</span>
+              <span id="eventNameDisplay" class="event-name-text">Sesión Principal</span>
+            </span>
+          </div>
+
           <div class="brand-title-row">
             <h1 id="boardTitle">PadletLocal</h1>
             <button id="activeSessionBadge" class="session-badge hidden" title="Sesión de clase activa">📚 Sesión</button>
-            <button id="btnEditBoard" class="icon-btn-subtle" title="Editar título del panel" aria-label="Editar título del panel">
+            <button id="btnEditBoard" class="icon-btn-subtle" title="Editar institución, evento y título del panel" aria-label="Editar institución, evento y título del panel">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 20h9" />
                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
@@ -806,6 +819,21 @@
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   </button>
+
+  <!-- Developer Credit Badge (Small with Visual Colors) -->
+  <aside id="devContactBadge" class="dev-contact-badge" aria-label="Información del desarrollador">
+    <button type="button" id="btnOpenDevInfo" class="dev-badge-btn" title="Desarrollador: José Mejía · CoDevNexus (Clic para soporte y detalles)">
+      <span class="dev-sparkle-dot" aria-hidden="true"></span>
+      <span class="dev-badge-content">
+        <span class="dev-title-label">Dev:</span>
+        <strong class="dev-author-name">José Mejía</strong>
+        <span class="dev-badge-divider">·</span>
+        <span class="dev-badge-company">CoDevNexus</span>
+        <span class="dev-badge-divider">·</span>
+        <span class="dev-badge-contact">✉ jmejia@codevnexus.tech</span>
+      </span>
+    </button>
+  </aside>
 
   <!-- Live Teacher Announcement Stack -->
   <div id="announcementStack" class="announcement-stack" aria-live="assertive"></div>
@@ -1614,17 +1642,25 @@
   <div id="boardEditModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
     <div class="modal modal-sm">
       <div class="modal-header">
-        <h2>Editar panel</h2>
+        <h2>Institución y evento</h2>
         <button class="icon-btn" data-close-modal="boardEditModal" aria-label="Cerrar">✕</button>
       </div>
       <form id="boardEditForm" class="modal-body">
         <div class="form-group">
-          <label for="inputBoardTitle">Título del panel</label>
-          <input id="inputBoardTitle" type="text" maxlength="80" required />
+          <label for="inputBoardInstitution">Institución que imparte las sesiones</label>
+          <input id="inputBoardInstitution" type="text" maxlength="100" placeholder="Ej. Universidad / Colegio / Centro de Formación" />
         </div>
         <div class="form-group">
-          <label for="inputBoardDesc">Descripción</label>
-          <textarea id="inputBoardDesc" rows="3" maxlength="220"></textarea>
+          <label for="inputBoardLogo">Logo de la institución (URL o imagen)</label>
+          <input id="inputBoardLogo" type="text" maxlength="500" placeholder="https://... o /uploads/... (deja vacío para logo por defecto)" />
+        </div>
+        <div class="form-group">
+          <label for="inputBoardTitle">Nombre del evento que se realiza</label>
+          <input id="inputBoardTitle" type="text" maxlength="80" placeholder="Ej. Sesión Principal / Taller de Programación" required />
+        </div>
+        <div class="form-group">
+          <label for="inputBoardDesc">Descripción del evento</label>
+          <textarea id="inputBoardDesc" rows="3" maxlength="220" placeholder="Descripción breve del tema o sesión"></textarea>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" data-close-modal="boardEditModal">Cancelar</button>
@@ -1878,6 +1914,14 @@
           </p>
 
           <div class="dev-meta-grid">
+            <div class="dev-meta-item">
+              <span class="dev-meta-label">Desarrollador Principal</span>
+              <strong style="color:var(--text);font-size:0.95rem;">José Mejía</strong>
+            </div>
+            <div class="dev-meta-item">
+              <span class="dev-meta-label">Firma Tecnológica</span>
+              <strong style="color:var(--text);font-size:0.95rem;">CoDevNexus</strong>
+            </div>
             <div class="dev-meta-item">
               <span class="dev-meta-label">Sitio Web Oficial</span>
               <a href="https://www.codevnexus.tech" target="_blank" rel="noopener noreferrer" class="dev-meta-link">

@@ -677,6 +677,9 @@ app.patch('/api/board', (req, res) => {
     const updated = store.updateBoard(
       {
         title: req.body?.title,
+        eventName: req.body?.eventName,
+        institutionName: req.body?.institutionName,
+        institutionLogo: req.body?.institutionLogo,
         description: req.body?.description,
       },
       sid

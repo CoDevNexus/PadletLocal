@@ -668,11 +668,18 @@
     cameraFacingSelect: document.getElementById('cameraFacingSelect'),
     btnUploadScreenCapture: document.getElementById('btnUploadScreenCapture'),
 
-    // Board edit modal
+    // Board edit modal & Branding
     boardEditModal: document.getElementById('boardEditModal'),
     boardEditForm: document.getElementById('boardEditForm'),
+    inputBoardInstitution: document.getElementById('inputBoardInstitution'),
+    inputBoardLogo: document.getElementById('inputBoardLogo'),
     inputBoardTitle: document.getElementById('inputBoardTitle'),
     inputBoardDesc: document.getElementById('inputBoardDesc'),
+    institutionLogoBox: document.getElementById('institutionLogoBox'),
+    institutionLogoImg: document.getElementById('institutionLogoImg'),
+    institutionLogoDefault: document.getElementById('institutionLogoDefault'),
+    institutionNameDisplay: document.getElementById('institutionNameDisplay'),
+    eventNameDisplay: document.getElementById('eventNameDisplay'),
 
     // Quick name modal
     nameModal: document.getElementById('nameModal'),
@@ -688,6 +695,8 @@
     // Developer info & updates (CoDevNexus)
     btnAboutDev: document.getElementById('btnAboutDev'),
     aboutDevModal: document.getElementById('aboutDevModal'),
+    devContactBadge: document.getElementById('devContactBadge'),
+    btnOpenDevInfo: document.getElementById('btnOpenDevInfo'),
     btnCheckUpdates: document.getElementById('btnCheckUpdates'),
     updatesResultBox: document.getElementById('updatesResultBox'),
     appCurrentVersionBadge: document.getElementById('appCurrentVersionBadge'),
@@ -3251,9 +3260,40 @@
 
   // --- Board Meta & Filters (Padlets Section) ---
   function renderBoardMeta() {
-    el.boardTitle.textContent = state.board.title || 'PadletLocal';
-    el.boardDescription.textContent = state.board.description || '';
-    document.title = `${state.board.title || 'PadletLocal'} — Panel Colaborativo`;
+    const instName = state.board?.institutionName || 'Institución Educativa';
+    const eventName = state.board?.eventName || state.board?.title || 'Sesión Principal';
+    const instLogo = state.board?.institutionLogo || '';
+
+    if (el.institutionNameDisplay) {
+      el.institutionNameDisplay.textContent = `🏫 ${instName.replace(/^🏫\s*/, '')}`;
+      el.institutionNameDisplay.title = `Institución que imparte las sesiones: ${instName}`;
+    }
+
+    if (el.eventNameDisplay) {
+      el.eventNameDisplay.textContent = eventName;
+      el.eventNameDisplay.title = `Evento en curso: ${eventName}`;
+    }
+
+    if (el.boardTitle) {
+      el.boardTitle.textContent = eventName;
+    }
+
+    if (el.boardDescription) {
+      el.boardDescription.textContent = state.board?.description || '';
+    }
+
+    if (el.institutionLogoImg && el.institutionLogoDefault) {
+      if (instLogo) {
+        el.institutionLogoImg.src = instLogo;
+        el.institutionLogoImg.classList.remove('hidden');
+        el.institutionLogoDefault.classList.add('hidden');
+      } else {
+        el.institutionLogoImg.classList.add('hidden');
+        el.institutionLogoDefault.classList.remove('hidden');
+      }
+    }
+
+    document.title = `${eventName} · ${instName} — PadletLocal`;
   }
 
   function matchesCurrentFilters(post) {
@@ -4985,26 +5025,42 @@
   });
 
   el.btnEditBoard.addEventListener('click', () => {
-    el.inputBoardTitle.value = state.board.title || '';
+    if (el.inputBoardInstitution) {
+      el.inputBoardInstitution.value = (state.board.institutionName || 'Institución Educativa').replace(/^🏫\s*/, '');
+    }
+    if (el.inputBoardLogo) {
+      el.inputBoardLogo.value = state.board.institutionLogo || '';
+    }
+    el.inputBoardTitle.value = state.board.eventName || state.board.title || '';
     el.inputBoardDesc.value = state.board.description || '';
     openModal(el.boardEditModal);
-    el.inputBoardTitle.focus();
+    if (el.inputBoardTitle) el.inputBoardTitle.focus();
   });
 
   el.boardEditForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = el.inputBoardTitle.value.trim();
+    const eventName = title;
+    const institutionName = el.inputBoardInstitution ? el.inputBoardInstitution.value.trim() : '';
+    const institutionLogo = el.inputBoardLogo ? el.inputBoardLogo.value.trim() : '';
     const description = el.inputBoardDesc.value.trim();
     if (!title) return;
     try {
       const res = await fetch('/api/board', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description }),
+        body: JSON.stringify({
+          sessionId: state.activeSessionId,
+          title,
+          eventName,
+          institutionName,
+          institutionLogo,
+          description,
+        }),
       });
       if (!res.ok) throw new Error('Error al guardar');
       closeModal(el.boardEditModal);
-      showToast('Panel actualizado', 'success');
+      showToast('Institución y evento actualizados', 'success');
     } catch {
       showToast('No se pudo actualizar el panel', 'error');
     }
@@ -5066,6 +5122,12 @@
   });
 
   // --- About CoDevNexus & Check Updates Listeners ---
+  if (el.btnOpenDevInfo && el.aboutDevModal) {
+    el.btnOpenDevInfo.addEventListener('click', () => {
+      openModal(el.aboutDevModal);
+    });
+  }
+
   if (el.btnAboutDev && el.aboutDevModal) {
     el.btnAboutDev.addEventListener('click', () => {
       openModal(el.aboutDevModal);
