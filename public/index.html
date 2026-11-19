@@ -5,6 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PadletLocal — Panel Colaborativo en Red Local</title>
   <link rel="stylesheet" href="/css/styles.css" />
+  <script>
+    window.addEventListener('error', function(e) {
+      try {
+        var payload = JSON.stringify({
+          type: 'CLIENT_JS_ERROR',
+          message: e.message || 'Error en script',
+          source: e.filename || location.href,
+          lineno: e.lineno,
+          colno: e.colno,
+          stack: e.error ? e.error.stack : ''
+        });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/log-error', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/log-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(function(){});
+        }
+      } catch (_) {}
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      try {
+        var payload = JSON.stringify({
+          type: 'CLIENT_UNHANDLED_PROMISE',
+          message: e.reason ? (e.reason.message || String(e.reason)) : 'Promesa no manejada',
+          stack: e.reason && e.reason.stack ? e.reason.stack : ''
+        });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/log-error', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/log-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(function(){});
+        }
+      } catch (_) {}
+    });
+  </script>
 </head>
 <body class="role-student">
   <!-- Sticky Top Navigation -->
@@ -1739,7 +1772,10 @@
               <strong>🔄 Actualizaciones del Sistema</strong>
               <div class="muted-note" style="font-size:0.8rem;">Versión actual instalada: <span id="appCurrentVersionBadge" class="version-tag">v1.2.0</span></div>
             </div>
-            <button type="button" id="btnCheckUpdates" class="btn btn-sm btn-secondary">🔍 Buscar actualizaciones</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" id="btnCheckUpdates" class="btn btn-sm btn-secondary">🔍 Buscar actualizaciones</button>
+              <a href="/api/log-error" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none;" title="Ver archivo error.log guardado en la raíz del proyecto">📄 Ver error.log</a>
+            </div>
           </div>
           <div id="updatesResultBox" class="updates-result-box hidden"></div>
           <div class="dev-safe-notice">

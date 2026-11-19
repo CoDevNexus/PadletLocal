@@ -1,4 +1,28 @@
 (() => {
+  // --- Global Client Error Reporter to Root error.log ---
+  window.reportClientError = function (context, err) {
+    try {
+      const payload = {
+        type: 'CLIENT_REPORTED_ERROR',
+        message: `[${context}] ${err?.message || String(err)}`,
+        stack: err?.stack || '',
+        role: state?.isTeacher ? 'Docente' : 'Alumno',
+        author: authorName || 'Sin identificar',
+        url: window.location.href,
+      };
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/log-error', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+      } else {
+        fetch('/api/log-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  };
+
   // --- Utilities ---
   function generateId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {

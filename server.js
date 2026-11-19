@@ -17,6 +17,18 @@ const HTTPS_PORT = Number(process.env.HTTPS_PORT || 3443);
 const HOST = process.env.HOST || '0.0.0.0';
 
 const CFG_FILE = path.join(__dirname, 'data', 'panel.cfg');
+const ERROR_LOG_PATH = path.join(__dirname, 'error.log');
+
+function writeErrorLog(category, message, extra = {}) {
+  try {
+    const timestamp = new Date().toISOString();
+    const details = Object.keys(extra).length > 0 ? ` | Info: ${JSON.stringify(extra)}` : '';
+    const entry = `[${timestamp}] [${category}] ${message}${details}\n`;
+    fs.appendFileSync(ERROR_LOG_PATH, entry, 'utf8');
+  } catch (logErr) {
+    console.error('Error al escribir en error.log:', logErr.message);
+  }
+}
 
 function loadTeacherPin() {
   try {
@@ -159,6 +171,7 @@ const upload = multer({
 });
 
 app.use(express.json({ limit: '1mb' }));
+app.use(express.text({ type: ['text/plain', 'application/json'], limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 
@@ -532,9 +545,52 @@ app.get('/api/updates/check', async (_req, res) => {
   }
 });
 
+// --- Root error.log Endpoints ---
+app.post('/api/log-error', (req, res) => {
+  try {
+    let payload = req.body;
+    if (typeof payload === 'string') {
+      try { payload = JSON.parse(payload); } catch {}
+    }
+    const { type, message, source, lineno, colno, stack, role, author, url } = payload || {};
+    writeErrorLog(type || 'CLIENT_ERROR', message || 'Error reportado por cliente', {
+      source: source || '',
+      line: `${lineno || 0}:${colno || 0}`,
+      role: role || 'Desconocido',
+      author: author || 'Anónimo',
+      url: url || '',
+      stack: stack || '',
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers['user-agent'] || '',
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/log-error', (req, res) => {
+  try {
+    if (!fs.existsSync(ERROR_LOG_PATH)) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send('(El archivo error.log está vacío, no se han registrado errores)');
+    }
+    const content = fs.readFileSync(ERROR_LOG_PATH, 'utf8');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.send(content.length > 200000 ? content.slice(-200000) : content);
+  } catch (err) {
+    res.status(500).send(`Error al leer log: ${err.message}`);
+  }
+});
+
 app.post('/api/teacher/login', (req, res) => {
   const pin = String(req.body?.pin || '').trim();
   if (!pin || pin !== TEACHER_PIN) {
+    writeErrorLog('TEACHER_AUTH_FAIL', 'Intento de inicio de sesión como docente con PIN incorrecto o vacío', {
+      receivedPinLength: pin.length,
+      ip: req.ip || req.socket?.remoteAddress,
+      userAgent: req.headers['user-agent'] || '',
+    });
     return res.status(401).json({ error: 'PIN de profesor incorrecto.' });
   }
   const token = crypto.randomBytes(24).toString('hex');
@@ -2323,10 +2379,23 @@ async function start() {
   console.log('\n  [Certificado HTTPS sin pantalla roja]');
   console.log(`    Windows (1 clic) : http://${primaryIP}:${HTTP_PORT}/cert/Instalar-Certificado-Windows.bat`);
   console.log(`    Otros (.crt)     : http://${primaryIP}:${HTTP_PORT}/cert/PadletLocal-RootCA.crt`);
+  console.log(`    Registro errores : error.log (en raíz de PadletLocal)`);
   console.log('==============================================================\n');
+  writeErrorLog('SYSTEM', 'Servidor PadletLocal iniciado exitosamente.');
 }
 
+process.on('uncaughtException', (err) => {
+  writeErrorLog('UNCAUGHT_EXCEPTION', err?.stack || err?.message || String(err));
+  console.error('[UNCAUGHT_EXCEPTION]', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  writeErrorLog('UNHANDLED_REJECTION', reason instanceof Error ? (reason.stack || reason.message) : String(reason));
+  console.error('[UNHANDLED_REJECTION]', reason);
+});
+
 start().catch((err) => {
+  writeErrorLog('FATAL_STARTUP_ERROR', err?.stack || err?.message || String(err));
   console.error('Error fatal al iniciar PadletLocal:', err.message || err);
   process.exit(1);
 });
