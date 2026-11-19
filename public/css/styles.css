@@ -6559,6 +6559,43 @@ body.role-teacher .student-only {
   color: #fff;
 }
 
+.chat-bubble-encrypted-badge {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.18);
+  color: #10b981;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.chat-bubble.is-outgoing .chat-bubble-encrypted-badge {
+  background: rgba(0, 0, 0, 0.22);
+  color: #a7f3d0;
+}
+
+.btn-chat-delete-msg {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 1px 4px;
+  font-size: 0.72rem;
+  opacity: 0.6;
+  border-radius: 4px;
+  transition: opacity 0.15s, transform 0.1s;
+  color: inherit;
+  margin-left: 4px;
+}
+
+.btn-chat-delete-msg:hover {
+  opacity: 1;
+  transform: scale(1.15);
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
 .chat-bubble-time {
   margin-left: auto;
   font-size: 0.68rem;
@@ -6604,6 +6641,82 @@ body.role-teacher .student-only {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* User Identity & Nick Bar in Chat */
+.chat-my-nick-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(99, 102, 241, 0.08);
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+
+.chat-my-nick-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-my-nick-label {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.chat-my-nick-val {
+  font-size: 0.84rem;
+  color: var(--text);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Chat Thread Banner */
+.chat-thread-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.chat-thread-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-thread-banner-left strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-thread-badge {
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.chat-thread-badge.badge-public {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.chat-thread-badge.badge-private {
+  background: rgba(16, 185, 129, 0.18);
+  color: #10b981;
 }
 
 /* Online Participants List */
@@ -6687,6 +6800,27 @@ body.role-teacher .student-only {
   height: 6px;
   border-radius: 50%;
   background: #10b981;
+}
+
+.chat-user-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.chat-me-tag {
+  font-size: 0.72rem;
+  color: #818cf8;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.chat-user-item-me {
+  background: rgba(99, 102, 241, 0.05);
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
 .btn-chat-private {

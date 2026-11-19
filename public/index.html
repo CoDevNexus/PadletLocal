@@ -228,6 +228,14 @@
       </div>
     </div>
 
+    <div class="chat-my-nick-bar">
+      <div class="chat-my-nick-info">
+        <span class="chat-my-nick-label">Mi apodo:</span>
+        <strong id="chatCurrentUserName" class="chat-my-nick-val">Alumno</strong>
+      </div>
+      <button type="button" id="btnChatEditMyNick" class="btn btn-xs btn-secondary" title="Cambiar tu nombre o apodo en toda la clase">✏️ Cambiar nick</button>
+    </div>
+
     <div class="chat-tabs" role="tablist">
       <button type="button" id="tabChatMessages" class="chat-tab active">
         <span>💬 Mensajes</span>
@@ -241,14 +249,21 @@
     <!-- Messages Pane -->
     <div id="chatMessagesPane" class="chat-pane active">
       <div class="chat-target-bar">
-        <label for="chatRecipientSelect" class="chat-target-label">Para:</label>
+        <label for="chatRecipientSelect" class="chat-target-label">Conversación:</label>
         <select id="chatRecipientSelect" class="chat-recipient-select">
-          <option value="all">📢 Todos en la sesión (Público)</option>
-          <option value="teachers">🎓 Docente(s) (Privado)</option>
+          <option value="all">📢 Canal General (Toda la clase)</option>
+          <option value="teachers">🎓 Chat con Docente (Privado)</option>
         </select>
       </div>
+      <div id="chatThreadBanner" class="chat-thread-banner">
+        <div class="chat-thread-banner-left">
+          <span id="chatThreadIcon">📢</span>
+          <strong id="chatThreadTitle">Canal General de la Clase</strong>
+        </div>
+        <span id="chatThreadBadge" class="chat-thread-badge badge-public">Público</span>
+      </div>
       <div id="chatPrivacyNote" class="chat-privacy-note hidden">
-        🔒 <span>Mensaje privado: solo tú y el destinatario lo verán.</span>
+        🔒 <span>Chat privado e independiente: protegido y cifrado con privacidad estricta.</span>
       </div>
 
       <div id="chatMessagesList" class="chat-messages-list">

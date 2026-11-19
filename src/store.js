@@ -127,6 +127,43 @@ function ensureDirectories() {
   }
 }
 
+// Encryption for private chat messages in store
+function deriveChatKey(sessionId) {
+  return crypto.createHash('sha256').update(`padlet-chat-secret:${sessionId || 'default'}`).digest();
+}
+
+function encryptStoredText(text, sessionId) {
+  if (!text || typeof text !== 'string') return text;
+  try {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', deriveChatKey(sessionId), iv);
+    let enc = cipher.update(text, 'utf8', 'base64');
+    enc += cipher.final('base64');
+    const tag = cipher.getAuthTag();
+    return `ENC:GCM:${iv.toString('base64')}:${tag.toString('base64')}:${enc}`;
+  } catch (err) {
+    return text;
+  }
+}
+
+function decryptStoredText(payload, sessionId) {
+  if (!payload || typeof payload !== 'string' || !payload.startsWith('ENC:GCM:')) return payload;
+  try {
+    const parts = payload.split(':');
+    if (parts.length < 5) return payload;
+    const iv = Buffer.from(parts[2], 'base64');
+    const tag = Buffer.from(parts[3], 'base64');
+    const enc = parts[4];
+    const decipher = crypto.createDecipheriv('aes-256-gcm', deriveChatKey(sessionId), iv);
+    decipher.setAuthTag(tag);
+    let dec = decipher.update(enc, 'base64', 'utf8');
+    dec += decipher.final('utf8');
+    return dec;
+  } catch (err) {
+    return payload;
+  }
+}
+
 class BoardStore {
   constructor() {
     ensureDirectories();
@@ -595,8 +632,10 @@ class BoardStore {
       }
       if (Array.isArray(session.chatMessages)) {
         for (const m of session.chatMessages) {
-          if ((m.authorId === authorId || m.fromId === authorId) && m.author !== cleanName) {
+          if (m.authorId === authorId || m.fromId === authorId) {
             m.author = cleanName;
+            m.authorName = cleanName;
+            m.fromName = cleanName;
             modified = true;
           }
         }
@@ -1885,13 +1924,18 @@ class BoardStore {
     }
   }
 
-  // --- Chat System (Per-Session, Strict Privacy) ---
+  // --- Chat System (Per-Session, Strict Privacy & Encryption) ---
   addChatMessage(sessionId, message) {
     const session = this.resolveSession(sessionId);
     if (!Array.isArray(session.chatMessages)) {
       session.chatMessages = [];
     }
-    session.chatMessages.push(message);
+    const stored = { ...message };
+    if (stored.isPrivate) {
+      stored.text = encryptStoredText(stored.text, session.id);
+      stored.isEncrypted = true;
+    }
+    session.chatMessages.push(stored);
     if (session.chatMessages.length > 500) {
       session.chatMessages = session.chatMessages.slice(-500);
     }
@@ -1902,8 +1946,8 @@ class BoardStore {
   getSessionChat(sessionId, { authorId, isTeacher = false } = {}) {
     const session = this.resolveSession(sessionId);
     const msgs = Array.isArray(session.chatMessages) ? session.chatMessages : [];
-    // Strict privacy filtering:
-    return msgs.filter((m) => {
+    // Strict privacy filtering: teacher cannot see student-to-student private chats
+    const filtered = msgs.filter((m) => {
       if (!m.isPrivate || m.to === 'all') return true;
       const mFrom = m.fromId || m.authorId;
       const mTo = m.to;
@@ -1913,6 +1957,34 @@ class BoardStore {
       if ((m.fromRole === 'teacher' || m.isTeacher) && (mTo === authorId || mTo === `user:${authorId}`)) return true;
       return false;
     });
+
+    // Decrypt messages for authorized participants
+    return filtered.map((m) => {
+      if (m.isEncrypted || (m.text && typeof m.text === 'string' && m.text.startsWith('ENC:GCM:'))) {
+        return {
+          ...m,
+          text: decryptStoredText(m.text, session.id),
+          isEncrypted: true,
+        };
+      }
+      return m;
+    });
+  }
+
+  deleteChatMessage(sessionId, messageId, { authorId, isTeacher = false } = {}) {
+    const session = this.resolveSession(sessionId);
+    if (!Array.isArray(session.chatMessages)) return null;
+    const index = session.chatMessages.findIndex((m) => m.id === messageId);
+    if (index === -1) return null;
+    const msg = session.chatMessages[index];
+    const msgFrom = msg.fromId || msg.authorId;
+    // Only the author who initiated / sent the message can delete it
+    if (msgFrom !== authorId) {
+      return null;
+    }
+    const [deleted] = session.chatMessages.splice(index, 1);
+    this.save();
+    return deleted;
   }
 
   clearSessionChat(sessionId) {

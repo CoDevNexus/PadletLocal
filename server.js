@@ -92,15 +92,40 @@ function getSessionOnlineUsers(sessionId) {
   if (!sessionId) return [];
   const users = [];
   const seenAuthors = new Set();
+  const roomSet = io.sockets.adapter.rooms.get(sessionRoom(sessionId));
+  if (roomSet) {
+    for (const sockId of roomSet) {
+      const client = connectedClients.get(sockId);
+      const sock = io.sockets.sockets.get(sockId);
+      const aId = client?.authorId || sock?.data?.authorId || socketAuthors.get(sockId) || sockId;
+      if (!seenAuthors.has(aId)) {
+        seenAuthors.add(aId);
+        const isTeacher = Boolean(client?.isTeacher || sock?.data?.isTeacher);
+        const name =
+          client?.name ||
+          (isTeacher
+            ? (sock?.data?.teacherName || 'Docente')
+            : (sock?.data?.authorName || 'Alumno'));
+        users.push({
+          authorId: aId,
+          name,
+          role: isTeacher ? 'teacher' : 'student',
+          isTeacher,
+          socketId: sockId,
+        });
+      }
+    }
+  }
   for (const client of connectedClients.values()) {
     if (client.sessionId === sessionId) {
-      if (!seenAuthors.has(client.authorId)) {
-        seenAuthors.add(client.authorId);
+      const aId = client.authorId || client.socketId;
+      if (!seenAuthors.has(aId)) {
+        seenAuthors.add(aId);
         users.push({
-          authorId: client.authorId,
-          name: client.name,
-          role: client.role,
-          isTeacher: client.isTeacher,
+          authorId: aId,
+          name: client.name || (client.isTeacher ? 'Docente' : 'Alumno'),
+          role: client.role || (client.isTeacher ? 'teacher' : 'student'),
+          isTeacher: Boolean(client.isTeacher),
           socketId: client.socketId,
         });
       }
@@ -879,7 +904,7 @@ function broadcastPresence(sessionId) {
   const count = io.sockets.adapter.rooms.get(sessionRoom(sessionId))?.size || 0;
   const users = getSessionOnlineUsers(sessionId);
   io.to(sessionRoom(sessionId)).emit('presence:count', { count });
-  io.to(sessionRoom(sessionId)).emit('chat:users', { users, count });
+  io.to(sessionRoom(sessionId)).emit('chat:users', { sessionId, users, count });
 }
 
 function broadcastScreenQueue(sessionId) {
@@ -1147,6 +1172,17 @@ io.on('connection', (socket) => {
 
   // Auto-join default published session if available so board is ready immediately
   const defaultSession = store.getDefaultStudentSession();
+  const initSid = defaultSession ? defaultSession.id : null;
+
+  connectedClients.set(socket.id, {
+    socketId: socket.id,
+    authorId: socket.id,
+    name: 'Alumno',
+    role: 'student',
+    isTeacher: false,
+    sessionId: initSid,
+  });
+
   if (defaultSession) {
     joinSocketToSession(socket, defaultSession.id);
   }
@@ -2855,6 +2891,57 @@ io.on('connection', (socket) => {
       }
 
       if (typeof ack === 'function') ack({ ok: true, message: msg });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('chat:get-users', ({ sessionId } = {}, ack) => {
+    try {
+      const sid = sessionId || socket.data.sessionId;
+      const users = getSessionOnlineUsers(sid);
+      const count = io.sockets.adapter.rooms.get(sessionRoom(sid))?.size || users.length;
+      if (typeof ack === 'function') ack({ ok: true, sessionId: sid, users, count });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('chat:message:delete', (payload, ack) => {
+    try {
+      const sid = payload?.sessionId || socket.data.sessionId;
+      if (!sid) throw new Error('Sesión no encontrada.');
+      const messageId = payload?.messageId;
+      if (!messageId) throw new Error('ID de mensaje requerido.');
+      const authorId = socket.data.authorId || socketAuthors.get(socket.id) || payload?.authorId;
+      const isTeacher = Boolean(socket.data.isTeacher);
+
+      const deleted = store.deleteChatMessage(sid, messageId, { authorId, isTeacher });
+      if (!deleted) {
+        throw new Error('Solo el autor que envió este mensaje puede eliminarlo.');
+      }
+
+      // Notify clients involved
+      if (!deleted.isPrivate || deleted.to === 'all') {
+        io.to(sessionRoom(sid)).emit('chat:message:deleted', { sessionId: sid, messageId });
+      } else if (deleted.to === 'teachers' || deleted.to === 'teacher') {
+        const senders = getSocketsByAuthorId(deleted.fromId, sid);
+        senders.forEach((sId) => io.sockets.sockets.get(sId)?.emit('chat:message:deleted', { sessionId: sid, messageId }));
+        for (const [sId, c] of connectedClients.entries()) {
+          if (c.sessionId === sid && c.isTeacher) {
+            io.sockets.sockets.get(sId)?.emit('chat:message:deleted', { sessionId: sid, messageId });
+          }
+        }
+      } else {
+        const targetId = deleted.to.startsWith('user:') ? deleted.to.slice(5) : deleted.to;
+        const sockIds = new Set([
+          ...getSocketsByAuthorId(deleted.fromId, sid),
+          ...getSocketsByAuthorId(targetId, sid),
+        ]);
+        sockIds.forEach((sId) => io.sockets.sockets.get(sId)?.emit('chat:message:deleted', { sessionId: sid, messageId }));
+      }
+
+      if (typeof ack === 'function') ack({ ok: true, messageId });
     } catch (err) {
       if (typeof ack === 'function') ack({ ok: false, error: err.message });
     }
