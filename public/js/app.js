@@ -88,19 +88,36 @@
   function formatRelativeTime(isoString) {
     if (!isoString) return '';
     const date = new Date(isoString);
-    const diffSec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-    if (diffSec < 15) return 'ahora mismo';
+    if (isNaN(date.getTime())) return '';
+    const now = typeof serverNow === 'function' ? serverNow() : Date.now();
+    const diffSec = Math.max(0, Math.floor((now - date.getTime()) / 1000));
+    if (diffSec < 15) return 'ahora';
     if (diffSec < 60) return `hace ${diffSec}s`;
     const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `hace ${diffMin} min`;
+    if (diffMin < 60) return `hace ${diffMin}m`;
     const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `hace ${diffHr} h`;
+    if (diffHr < 24) return `hace ${diffHr}h`;
+    const diffDays = Math.floor(diffHr / 24);
+    if (diffDays === 1) return 'hace 1d';
+    if (diffDays < 7) return `hace ${diffDays}d`;
     return date.toLocaleDateString('es-ES', {
       day: '2-digit',
       month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
     });
+  }
+
+  function getCardPreviewContent(content, maxChars = 150) {
+    if (!content) return '';
+    const clean = String(content).trim();
+    if (clean.length <= maxChars) {
+      return formatTextWithLinks(clean);
+    }
+    let truncated = clean.slice(0, maxChars);
+    const lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > maxChars * 0.7) {
+      truncated = truncated.slice(0, lastSpace);
+    }
+    return `${formatTextWithLinks(truncated)}… <span class="read-more-text" data-action="open-post-detail" title="Ver publicación completa">Ver más</span>`;
   }
 
   function formatCountdown(totalSeconds) {
@@ -700,6 +717,28 @@
     btnCheckUpdates: document.getElementById('btnCheckUpdates'),
     updatesResultBox: document.getElementById('updatesResultBox'),
     appCurrentVersionBadge: document.getElementById('appCurrentVersionBadge'),
+
+    // Centered Post Detail Modal
+    postDetailModal: document.getElementById('postDetailModal'),
+    postDetailAvatar: document.getElementById('postDetailAvatar'),
+    postDetailAuthor: document.getElementById('postDetailAuthor'),
+    postDetailRoleBadge: document.getElementById('postDetailRoleBadge'),
+    postDetailTime: document.getElementById('postDetailTime'),
+    postDetailBadges: document.getElementById('postDetailBadges'),
+    postDetailTopic: document.getElementById('postDetailTopic'),
+    postDetailImageWrap: document.getElementById('postDetailImageWrap'),
+    postDetailImage: document.getElementById('postDetailImage'),
+    postDetailContent: document.getElementById('postDetailContent'),
+    postDetailCommentsWrap: document.getElementById('postDetailCommentsWrap'),
+    btnDownloadPostText: document.getElementById('btnDownloadPostText'),
+    btnDownloadPostImage: document.getElementById('btnDownloadPostImage'),
+
+    // Screen audience selector
+    optAudienceAll: document.getElementById('optAudienceAll'),
+    optAudienceTeacher: document.getElementById('optAudienceTeacher'),
+    optAudienceCustom: document.getElementById('optAudienceCustom'),
+    screenTargetUsersBox: document.getElementById('screenTargetUsersBox'),
+    screenTargetUsersList: document.getElementById('screenTargetUsersList'),
 
     toastContainer: document.getElementById('toastContainer'),
   };
@@ -2888,7 +2927,9 @@
 
     state.posts.forEach((post) => {
       if (post.screenShare?.active && post.screenShare.sharerSocketId !== state.socketId) {
-        screenManager.watchScreen(post.id, post.screenShare.sharerSocketId);
+        if (canUserWatchScreen(post)) {
+          screenManager.watchScreen(post.id, post.screenShare.sharerSocketId, authorId);
+        }
       }
     });
   }
@@ -2957,9 +2998,9 @@
     renderScreenQueue();
   });
 
-  socket.on('screen:turn-granted', ({ queueId, author, reason, teacherName }) => {
+  socket.on('screen:turn-granted', ({ queueId, author, reason, audience, targetAuthorIds, teacherName }) => {
     state.pendingResumePostId = null;
-    state.pendingTurnGrant = { queueId, author, reason };
+    state.pendingTurnGrant = { queueId, author, reason, audience, targetAuthorIds };
     el.resumeScreenText.innerHTML = `<strong>${escapeHtml(
       teacherName || 'El profesor'
     )}</strong> te dio turno para compartir tu pantalla.<br/><br/><strong>Motivo:</strong> ${escapeHtml(
@@ -3175,27 +3216,47 @@
     updateWorkspaceTabBadges();
   });
 
-  socket.on('screen:started', ({ postId, sharerSocketId, sharerAuthorId, sharerName, pausedByTeacher, viewerCount }) => {
-    const post = state.posts.find((p) => p.id === postId);
-    if (!post) return;
-    post.screenShare = {
-      active: true,
+  socket.on(
+    'screen:started',
+    ({
+      postId,
       sharerSocketId,
       sharerAuthorId,
       sharerName,
-      pausedByTeacher: Boolean(pausedByTeacher),
-      viewerCount: viewerCount || 0,
-    };
+      sourceType,
+      audience,
+      targetAuthorIds,
+      pausedByTeacher,
+      viewerCount,
+    }) => {
+      const post = state.posts.find((p) => p.id === postId);
+      if (!post) return;
+      post.screenShare = {
+        active: true,
+        sharerSocketId,
+        sharerAuthorId,
+        sharerName,
+        sourceType: sourceType || 'screen',
+        audience: audience || 'all',
+        targetAuthorIds: Array.isArray(targetAuthorIds) ? targetAuthorIds : [],
+        pausedByTeacher: Boolean(pausedByTeacher),
+        viewerCount: viewerCount || 0,
+      };
 
-    renderTopicBar();
-    refreshCard(postId);
-    updateWorkspaceTabBadges();
+      renderTopicBar();
+      refreshCard(postId);
+      updateWorkspaceTabBadges();
 
-    if (sharerSocketId !== socket.id) {
-      screenManager.watchScreen(postId, sharerSocketId);
-      showToast(`🖥️ ${sharerName} está compartiendo su pantalla ("${post.topic}")`);
+      if (sharerSocketId !== socket.id) {
+        if (canUserWatchScreen(post)) {
+          screenManager.watchScreen(postId, sharerSocketId, authorId);
+          showToast(`🖥️ ${sharerName} está compartiendo su pantalla ("${post.topic}")`);
+        } else {
+          showToast(`🔒 ${sharerName} inició una transmisión privada ("${post.topic}")`, 'info');
+        }
+      }
     }
-  });
+  );
 
   socket.on('screen:paused', ({ postId, paused, teacherName }) => {
     const post = state.posts.find((p) => p.id === postId);
@@ -3501,12 +3562,39 @@
       : `<button type="button" class="screen-ctrl-btn danger" data-action="teacher-pause-screen" title="Cortar pantalla compartida temporalmente">✂ Cortar</button>`;
   }
 
+  function canUserWatchScreen(post) {
+    if (!post?.screenShare?.active) return false;
+    const isPresenter = post.authorId === authorId || post.screenShare.sharerSocketId === socket.id;
+    if (isPresenter) return true;
+    if (state.isTeacher) return true;
+    const audience = post.screenShare.audience || 'all';
+    if (audience === 'teacher') return false;
+    if (audience === 'custom') {
+      const targets = post.screenShare.targetAuthorIds || [];
+      return targets.includes(authorId);
+    }
+    return true;
+  }
+
   function buildScreenStageHTML(post) {
     if (!post.screenShare?.active) return '';
     const isPresenter = screenManager.isPresenting(post.id) || post.screenShare.sharerSocketId === socket.id;
     const isExpanded = state.expandedCards.has(post.id);
     const hasStream = Boolean(screenManager.getStream(post.id));
     const isPaused = Boolean(post.screenShare.pausedByTeacher);
+
+    if (!canUserWatchScreen(post)) {
+      const isTeacherAudience = post.screenShare.audience === 'teacher';
+      return `
+        <div class="screen-stage screen-stage-restricted" data-screen-post-id="${escapeHtml(post.id)}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0f172a;color:#f8fafc;padding:24px 16px;text-align:center;border-radius:10px;min-height:160px;">
+          <div style="font-size:2rem;margin-bottom:6px;">🔒</div>
+          <strong style="font-size:0.92rem;color:#f1f5f9;margin-bottom:4px;">Transmisión Privada</strong>
+          <p style="margin:0;font-size:0.78rem;color:#94a3b8;max-width:240px;">
+            ${isTeacherAudience ? 'El autor comparte esta pantalla solo con el docente.' : 'Esta pantalla se comparte exclusivamente con participantes autorizados.'}
+          </p>
+        </div>
+      `;
+    }
 
     return `
       <div class="screen-stage" data-screen-post-id="${escapeHtml(post.id)}">
@@ -3720,7 +3808,15 @@
                </div>`
             : ''
         }
-        ${post.content ? `<p class="card-content">${formatTextWithLinks(post.content)}</p>` : ''}
+        ${
+          post.content
+            ? `<div class="card-content">${
+                state.focusedCardId === post.id || state.expandedCards.has(post.id)
+                  ? formatTextWithLinks(post.content)
+                  : getCardPreviewContent(post.content, 150)
+              }</div>`
+            : ''
+        }
         <span class="compact-grow-hint">🔍 Clic para ver más grande</span>
       `,
       footerHtml: `
@@ -3740,6 +3836,13 @@
           ${reviewBtn}
         </div>
         <div class="card-footer-right">
+          <button type="button" class="btn-choose-post" data-action="open-post-detail" title="Elegir publicación para ver en modal centrado y descargar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <span>Elegir / Ver</span>
+          </button>
           ${shareFooterBtn}
         </div>
       `,
@@ -3872,6 +3975,7 @@
 
   function syncCardStream(cardEl, post) {
     if (!post.screenShare?.active) return;
+    if (!canUserWatchScreen(post)) return;
     const streamInfo = screenManager.getStream(post.id);
     if (streamInfo && streamInfo.stream) {
       attachVideoUI(cardEl, post.id, streamInfo.stream, streamInfo.isLocal);
@@ -3927,6 +4031,157 @@
     }
   }
 
+  let activeDetailPost = null;
+
+  function openPostDetailModal(post) {
+    if (!post) return;
+    activeDetailPost = post;
+
+    if (el.postDetailAvatar) {
+      el.postDetailAvatar.textContent = getInitials(post.author);
+      el.postDetailAvatar.style.background = getAvatarColor(post.authorId || post.author);
+    }
+    if (el.postDetailAuthor) {
+      el.postDetailAuthor.textContent = post.author || 'Anónimo';
+    }
+    if (el.postDetailRoleBadge) {
+      const isTeacher = Boolean(post.authorIsTeacher);
+      el.postDetailRoleBadge.textContent = isTeacher ? '🎓 Profesor' : '🎒 Alumno';
+      el.postDetailRoleBadge.className = `post-detail-role-badge ${isTeacher ? 'is-teacher' : ''}`;
+    }
+    if (el.postDetailTime) {
+      el.postDetailTime.textContent = `${formatRelativeTime(post.createdAt)}${post.updatedAt ? ' · editado' : ''}`;
+    }
+    if (el.postDetailBadges) {
+      const badges = [];
+      if (post.highlighted) badges.push('<span class="highlighted-tag">⭐ Destacada</span>');
+      if (post.reviewed) {
+        badges.push(
+          `<span class="reviewed-badge" title="Revisada por ${escapeHtml(post.reviewedBy || 'Profesor')}">✓✓ Revisada</span>`
+        );
+      }
+      if (post.pinned) badges.push('<span class="pinned-tag">📌 Fijado</span>');
+      if (post.isHidden) badges.push('<span class="hidden-tag">🚫 Despublicada</span>');
+      el.postDetailBadges.innerHTML = badges.join(' ');
+    }
+    if (el.postDetailTopic) {
+      el.postDetailTopic.textContent = post.topic || 'Sin título';
+    }
+
+    if (post.imageUrl) {
+      if (el.postDetailImageWrap) el.postDetailImageWrap.classList.remove('hidden');
+      if (el.postDetailImage) {
+        el.postDetailImage.src = post.imageUrl;
+        el.postDetailImage.alt = post.topic || 'Imagen adjunta';
+      }
+      if (el.btnDownloadPostImage) el.btnDownloadPostImage.classList.remove('hidden');
+    } else {
+      if (el.postDetailImageWrap) el.postDetailImageWrap.classList.add('hidden');
+      if (el.postDetailImage) el.postDetailImage.src = '';
+      if (el.btnDownloadPostImage) el.btnDownloadPostImage.classList.add('hidden');
+    }
+
+    if (el.postDetailContent) {
+      el.postDetailContent.innerHTML = post.content
+        ? formatTextWithLinks(post.content)
+        : '<em class="muted-note" style="color:var(--text-muted);font-style:italic;">Esta publicación no contiene texto.</em>';
+    }
+
+    if (el.postDetailCommentsWrap) {
+      const comments = Array.isArray(post.comments) ? post.comments : [];
+      if (comments.length === 0) {
+        el.postDetailCommentsWrap.innerHTML = '';
+      } else {
+        const commentsHtml = comments
+          .map(
+            (c) => `
+          <div class="post-detail-comment-item" style="padding:10px 12px;background:var(--bg-input);border-radius:8px;margin-bottom:8px;border:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:0.8rem;">
+              <strong style="color:var(--text);">${escapeHtml(c.author)}</strong>
+              <span style="color:var(--text-muted);font-size:0.75rem;">${formatRelativeTime(c.createdAt)}</span>
+            </div>
+            <div style="font-size:0.88rem;color:var(--text);">${formatTextWithLinks(c.text)}</div>
+          </div>
+        `
+          )
+          .join('');
+        el.postDetailCommentsWrap.innerHTML = `
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+            <div style="font-size:0.92rem;font-weight:700;margin-bottom:10px;color:var(--text);">💬 Comentarios (${comments.length})</div>
+            <div class="post-detail-comments-list">${commentsHtml}</div>
+          </div>
+        `;
+      }
+    }
+
+    openModal(el.postDetailModal);
+  }
+
+  el.btnDownloadPostText?.addEventListener('click', () => {
+    if (!activeDetailPost) return;
+    const post = activeDetailPost;
+    const createdStr = new Date(post.createdAt).toLocaleString('es-ES');
+    const updatedStr = post.updatedAt ? new Date(post.updatedAt).toLocaleString('es-ES') : '';
+    const comments = Array.isArray(post.comments) ? post.comments : [];
+
+    let txt = `============================================================\n`;
+    txt += `PUBLICACIÓN DE: ${post.author} (${post.authorIsTeacher ? 'Profesor' : 'Alumno'})\n`;
+    txt += `TEMA: ${post.topic || '(Sin tema)'}\n`;
+    txt += `============================================================\n`;
+    txt += `Fecha de publicación: ${createdStr}\n`;
+    if (updatedStr) txt += `Última edición: ${updatedStr}\n`;
+    if (post.highlighted) txt += `Estado: ⭐ Destacada\n`;
+    if (post.reviewed) txt += `Revisión: ✓✓ Revisada por ${post.reviewedBy || 'Profesor'}\n`;
+    txt += `------------------------------------------------------------\n`;
+    txt += `CONTENIDO:\n\n`;
+    txt += `${post.content || '(Sin texto escrito)'}\n\n`;
+    txt += `------------------------------------------------------------\n`;
+    if (post.imageUrl) {
+      txt += `Imagen adjunta: ${window.location.origin}${post.imageUrl}\n`;
+      txt += `------------------------------------------------------------\n`;
+    }
+    if (comments.length > 0) {
+      txt += `Comentarios (${comments.length}):\n`;
+      comments.forEach((c) => {
+        const cDate = new Date(c.createdAt).toLocaleString('es-ES');
+        txt += `  [${c.author} · ${cDate}]:\n  ${c.text}\n\n`;
+      });
+      txt += `------------------------------------------------------------\n`;
+    }
+    txt += `Padlet Local · Generado el ${new Date().toLocaleString('es-ES')}\n`;
+    txt += `============================================================\n`;
+
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const safeTopic = (post.topic || 'publicacion').replace(/[^a-zA-Z0-9_\-áéíóúÁÉÍÓÚñÑ]/g, '_').slice(0, 35);
+    const safeAuthor = (post.author || 'alumno').replace(/[^a-zA-Z0-9_\-áéíóúÁÉÍÓÚñÑ]/g, '_').slice(0, 25);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `padlet_${safeAuthor}_${safeTopic}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('📥 Publicación descargada en archivo de texto (.txt)', 'success');
+  });
+
+  el.btnDownloadPostImage?.addEventListener('click', () => {
+    if (!activeDetailPost?.imageUrl) return;
+    const post = activeDetailPost;
+    const safeTopic = (post.topic || 'imagen').replace(/[^a-zA-Z0-9_\-áéíóúÁÉÍÓÚñÑ]/g, '_').slice(0, 35);
+    const safeAuthor = (post.author || 'alumno').replace(/[^a-zA-Z0-9_\-áéíóúÁÉÍÓÚñÑ]/g, '_').slice(0, 25);
+    const ext = post.imageUrl.split('.').pop().split('?')[0] || 'jpg';
+
+    const a = document.createElement('a');
+    a.href = post.imageUrl;
+    a.download = `padlet_${safeAuthor}_${safeTopic}.${ext}`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('🖼️ Descargando imagen adjunta...', 'info');
+  });
+
   // --- Event Delegation on Padlets Grid AND Screens Grid ---
   async function handleCardGridClick(e) {
     const cardEl = e.target.closest('.card');
@@ -3966,6 +4221,8 @@
 
     if (action === 'shrink-card') {
       setFocusedCard(null);
+    } else if (action === 'open-post-detail') {
+      openPostDetailModal(post);
     } else if (action === 'highlight-post') {
       socket.emit('post:highlight', { id: postId, highlighterName: authorName || 'Participante' }, (res) => {
         if (!res?.ok) showToast(res?.error || 'No se pudo destacar la respuesta', 'error');
@@ -4062,8 +4319,8 @@
       screenManager.stopSharing(postId);
       showToast('Pantalla compartida detenida');
     } else if (action === 'reconnect-screen') {
-      if (post.screenShare?.sharerSocketId) {
-        screenManager.reconnectWatch(postId, post.screenShare.sharerSocketId);
+      if (post.screenShare?.sharerSocketId && canUserWatchScreen(post)) {
+        screenManager.reconnectWatch(postId, post.screenShare.sharerSocketId, authorId);
         showToast('Reconectando transmisión...');
       }
     } else if (action === 'toggle-mute') {
@@ -4274,6 +4531,8 @@
         authorName: authorName || post.author,
         streamSource,
         facingMode,
+        audience: options.audience || post.screenShare?.audience || 'all',
+        targetAuthorIds: options.targetAuthorIds || post.screenShare?.targetAuthorIds || [],
       });
       showToast(
         streamSource === 'camera'
@@ -4306,6 +4565,16 @@
     el.screenReasonInput.value = '';
     el.screenModalError.textContent = '';
     el.screenModalError.classList.add('hidden');
+
+    // Reset audience selector to "all"
+    if (el.optAudienceAll) {
+      el.optAudienceAll.classList.add('active');
+      const radio = el.optAudienceAll.querySelector('input');
+      if (radio) radio.checked = true;
+    }
+    el.optAudienceTeacher?.classList.remove('active');
+    el.optAudienceCustom?.classList.remove('active');
+    el.screenTargetUsersBox?.classList.add('hidden');
 
     if (isMobileDevice) {
       if (el.screenSourceSelectorGroup) el.screenSourceSelectorGroup.classList.remove('hidden');
@@ -4345,6 +4614,55 @@
     });
   }
 
+  // Handle screen audience selector (All, Teacher, Custom)
+  function renderScreenTargetUsersList() {
+    if (!el.screenTargetUsersList) return;
+    const otherUsers = (state.chatUsers || []).filter((u) => u.authorId !== authorId);
+    if (otherUsers.length === 0) {
+      el.screenTargetUsersList.innerHTML = `
+        <div class="muted-note" style="padding:8px 10px;font-size:0.8rem;">
+          No hay otros participantes conectados ahora. Si inicias, solo tú o quien se una después con permiso podrá verla.
+        </div>
+      `;
+      return;
+    }
+    el.screenTargetUsersList.innerHTML = otherUsers
+      .map((u) => {
+        const roleLabel = u.isTeacher ? '🎓 Docente' : '🎒 Alumno';
+        return `
+          <label class="screen-target-user-item" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;background:var(--bg-input);margin-bottom:4px;">
+            <input type="checkbox" name="screenTargetUser" value="${escapeHtml(u.authorId)}" checked style="accent-color:var(--primary);" />
+            <div class="avatar" style="width:24px;height:24px;font-size:0.7rem;background:${getAvatarColor(u.name || u.authorId)}">${escapeHtml(getInitials(u.name))}</div>
+            <strong style="font-size:0.84rem;flex:1;color:var(--text);">${escapeHtml(u.name)}</strong>
+            <span style="font-size:0.72rem;color:var(--text-muted);">${roleLabel}</span>
+          </label>
+        `;
+      })
+      .join('');
+  }
+
+  if (el.optAudienceAll && el.optAudienceTeacher && el.optAudienceCustom) {
+    const audOptions = [
+      { el: el.optAudienceAll, val: 'all' },
+      { el: el.optAudienceTeacher, val: 'teacher' },
+      { el: el.optAudienceCustom, val: 'custom' },
+    ];
+    audOptions.forEach((opt) => {
+      opt.el.addEventListener('click', () => {
+        audOptions.forEach((o) => o.el.classList.remove('active'));
+        opt.el.classList.add('active');
+        const radio = opt.el.querySelector('input');
+        if (radio) radio.checked = true;
+        if (opt.val === 'custom') {
+          el.screenTargetUsersBox?.classList.remove('hidden');
+          renderScreenTargetUsersList();
+        } else {
+          el.screenTargetUsersBox?.classList.add('hidden');
+        }
+      });
+    });
+  }
+
   if (el.btnUploadScreenCapture) {
     el.btnUploadScreenCapture.addEventListener('click', () => {
       closeModal(el.screenShareModal);
@@ -4358,7 +4676,14 @@
     el.screenModalError.classList.remove('hidden');
   }
 
-  async function createScreenCardAndShare({ author, reason, streamSource = 'screen', facingMode = 'environment' }) {
+  async function createScreenCardAndShare({
+    author,
+    reason,
+    streamSource = 'screen',
+    facingMode = 'environment',
+    audience = 'all',
+    targetAuthorIds = [],
+  }) {
     if (!screenManager.isSecureContext()) {
       openModal(el.httpsRequiredModal);
       return false;
@@ -4379,6 +4704,11 @@
           topic: displayTopic,
           content: '',
           color: 'default',
+          screenShare: {
+            audience,
+            targetAuthorIds,
+            sourceType: streamSource,
+          },
         },
         resolve
       );
@@ -4392,7 +4722,7 @@
       applyWorkspaceView('screens');
     }
 
-    return triggerStartScreenShare(ack.post, { streamSource, facingMode });
+    return triggerStartScreenShare(ack.post, { streamSource, facingMode, audience, targetAuthorIds });
   }
 
   el.btnJoinScreenQueue.addEventListener('click', () => {
@@ -4411,9 +4741,17 @@
       return;
     }
 
+    const audienceRadio = el.screenShareForm.querySelector('input[name="screenAudienceChoice"]:checked');
+    const audience = audienceRadio ? audienceRadio.value : 'all';
+    const targetAuthorIds = [];
+    if (audience === 'custom' && el.screenTargetUsersList) {
+      const checkedBoxes = el.screenTargetUsersList.querySelectorAll('input[name="screenTargetUser"]:checked');
+      checkedBoxes.forEach((cb) => targetAuthorIds.push(cb.value));
+    }
+
     setAuthorName(author);
     el.btnJoinScreenQueue.disabled = true;
-    socket.emit('screen-queue:join', { authorId, author, reason }, (ack) => {
+    socket.emit('screen-queue:join', { authorId, author, reason, audience, targetAuthorIds }, (ack) => {
       el.btnJoinScreenQueue.disabled = false;
       if (!ack?.ok) {
         showScreenModalError(ack?.error || 'No se pudo agregar a la cola.');
@@ -4462,10 +4800,22 @@
     }
     const facingMode = el.cameraFacingSelect ? el.cameraFacingSelect.value : 'environment';
 
+    const audienceRadio = el.screenShareForm.querySelector('input[name="screenAudienceChoice"]:checked');
+    const audience = audienceRadio ? audienceRadio.value : 'all';
+    const targetAuthorIds = [];
+    if (audience === 'custom' && el.screenTargetUsersList) {
+      const checkedBoxes = el.screenTargetUsersList.querySelectorAll('input[name="screenTargetUser"]:checked');
+      checkedBoxes.forEach((cb) => targetAuthorIds.push(cb.value));
+      if (targetAuthorIds.length === 0) {
+        showScreenModalError('Debes seleccionar al menos un participante para compartir de forma personalizada.');
+        return;
+      }
+    }
+
     el.btnStartScreenDirect.disabled = true;
     try {
       closeModal(el.screenShareModal);
-      await createScreenCardAndShare({ author, reason, streamSource, facingMode });
+      await createScreenCardAndShare({ author, reason, streamSource, facingMode, audience, targetAuthorIds });
     } catch (err) {
       showToast(err.message || 'No se pudo iniciar la transmisión', 'error');
     } finally {
@@ -4818,6 +5168,8 @@
         await createScreenCardAndShare({
           author: turnGrant.author || authorName || 'Participante',
           reason: turnGrant.reason || 'Pantalla compartida',
+          audience: turnGrant.audience || 'all',
+          targetAuthorIds: turnGrant.targetAuthorIds || [],
         });
       } catch (err) {
         showToast(err.message || 'No se pudo compartir la pantalla', 'error');

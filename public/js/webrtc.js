@@ -99,7 +99,17 @@
       return true;
     }
 
-    async startSharing(postId, { authorId, authorName, streamSource = 'screen', facingMode = 'environment' } = {}) {
+    async startSharing(
+      postId,
+      {
+        authorId,
+        authorName,
+        streamSource = 'screen',
+        facingMode = 'environment',
+        audience = 'all',
+        targetAuthorIds = [],
+      } = {}
+    ) {
       if (!this.isSecureContext()) {
         const err = new Error('HTTPS_REQUIRED');
         err.code = 'HTTPS_REQUIRED';
@@ -188,7 +198,14 @@
       const ack = await new Promise((resolve) => {
         this.socket.emit(
           'screen:start',
-          { postId, authorId, authorName, sourceType: isCamera ? 'camera' : 'screen' },
+          {
+            postId,
+            authorId,
+            authorName,
+            sourceType: isCamera ? 'camera' : 'screen',
+            audience,
+            targetAuthorIds,
+          },
           (response) => resolve(response || { ok: false, error: 'Sin respuesta del servidor.' })
         );
       });
@@ -254,7 +271,7 @@
       }
     }
 
-    watchScreen(postId, sharerSocketId) {
+    watchScreen(postId, sharerSocketId, authorId = null) {
       if (this.localStreams.has(postId)) return;
       if (sharerSocketId && sharerSocketId === this.socket.id) return;
 
@@ -274,12 +291,12 @@
         pendingCandidates: [],
       });
 
-      this.socket.emit('screen:watch', { postId });
+      this.socket.emit('screen:watch', { postId, authorId });
     }
 
-    reconnectWatch(postId, sharerSocketId) {
+    reconnectWatch(postId, sharerSocketId, authorId = null) {
       this.unwatchScreen(postId, true);
-      this.watchScreen(postId, sharerSocketId);
+      this.watchScreen(postId, sharerSocketId, authorId);
     }
 
     unwatchScreen(postId, notifyServer = true) {

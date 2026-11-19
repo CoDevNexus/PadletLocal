@@ -1487,6 +1487,48 @@
             </select>
           </div>
         </div>
+
+        <!-- Audience Selector (¿Con quién compartir?) -->
+        <div class="form-group" style="margin-top:10px;">
+          <label class="form-label" style="font-weight:600;font-size:0.86rem;margin-bottom:6px;display:block;">
+            👥 ¿Con quién deseas compartir tu pantalla?
+          </label>
+          <div class="screen-audience-grid">
+            <label class="screen-audience-opt active" id="optAudienceAll">
+              <input type="radio" name="screenAudienceChoice" value="all" checked style="display:none;" />
+              <div class="aud-icon">📢</div>
+              <div class="aud-text">
+                <strong>Toda la clase</strong>
+                <small>Visible para todos los alumnos y docentes.</small>
+              </div>
+            </label>
+            <label class="screen-audience-opt" id="optAudienceTeacher">
+              <input type="radio" name="screenAudienceChoice" value="teacher" style="display:none;" />
+              <div class="aud-icon">🎓</div>
+              <div class="aud-text">
+                <strong>Solo el docente</strong>
+                <small>Privado: solo el profesor podrá ver tu transmisión.</small>
+              </div>
+            </label>
+            <label class="screen-audience-opt" id="optAudienceCustom">
+              <input type="radio" name="screenAudienceChoice" value="custom" style="display:none;" />
+              <div class="aud-icon">👥</div>
+              <div class="aud-text">
+                <strong>Elegir participantes</strong>
+                <small>Selecciona alumnos o profesores específicos.</small>
+              </div>
+            </label>
+          </div>
+
+          <div id="screenTargetUsersBox" class="screen-target-users-box hidden" style="margin-top:8px;">
+            <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">
+              Marca quiénes tendrán acceso a ver tu pantalla:
+            </label>
+            <div id="screenTargetUsersList" class="screen-target-users-list">
+              <div class="muted-note" style="font-size:0.78rem;">Cargando usuarios conectados...</div>
+            </div>
+          </div>
+        </div>
         <div id="screenModalError" class="form-error hidden"></div>
         <div class="modal-footer screen-modal-footer">
           <button type="button" id="btnJoinScreenQueue" class="btn btn-secondary">🙋 Pedir turno (encolar)</button>
@@ -1667,6 +1709,51 @@
           <button type="submit" class="btn btn-primary">Guardar cambios</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Centered Post Detail (Elegir, Ver y Descargar Publicación) -->
+  <div id="postDetailModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="postDetailTopic">
+    <div class="modal modal-post-detail">
+      <div class="modal-header">
+        <div class="post-detail-author-head">
+          <div id="postDetailAvatar" class="avatar">?</div>
+          <div>
+            <div class="post-detail-author-row">
+              <strong id="postDetailAuthor" class="author-name">Autor</strong>
+              <span id="postDetailRoleBadge" class="post-detail-role-badge">Alumno</span>
+            </div>
+            <div id="postDetailTime" class="post-time">hace un momento</div>
+          </div>
+        </div>
+        <div class="post-detail-head-actions">
+          <div id="postDetailBadges" class="post-detail-badges"></div>
+          <button type="button" class="icon-btn" data-close-modal="postDetailModal" aria-label="Cerrar modal">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body post-detail-body">
+        <h2 id="postDetailTopic" class="post-detail-topic">Tema de la publicación</h2>
+        <div id="postDetailImageWrap" class="post-detail-image-box hidden">
+          <img id="postDetailImage" class="post-detail-img" alt="Imagen adjunta de la publicación" />
+        </div>
+        <div id="postDetailContent" class="post-detail-content-text"></div>
+        <div id="postDetailCommentsWrap" class="post-detail-comments-box"></div>
+      </div>
+
+      <div class="modal-footer post-detail-footer">
+        <div class="post-detail-footer-actions">
+          <button type="button" id="btnDownloadPostText" class="btn btn-sm btn-secondary" title="Descargar publicación en archivo de texto (.txt)">
+            📥 Descargar publicación (.txt)
+          </button>
+          <button type="button" id="btnDownloadPostImage" class="btn btn-sm btn-secondary hidden" title="Descargar imagen adjunta">
+            🖼️ Descargar imagen
+          </button>
+        </div>
+        <button type="button" class="btn btn-sm btn-primary" data-close-modal="postDetailModal" title="Retornar a como estaba el panel">
+          ↩ Retornar a como estaba
+        </button>
+      </div>
     </div>
   </div>
 

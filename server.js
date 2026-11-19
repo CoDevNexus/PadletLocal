@@ -185,6 +185,9 @@ function enrichPost(post) {
           sharerSocketId: share.sharerSocketId,
           sharerAuthorId: share.sharerAuthorId,
           sharerName: share.sharerName,
+          sourceType: share.sourceType || 'screen',
+          audience: share.audience || 'all',
+          targetAuthorIds: Array.isArray(share.targetAuthorIds) ? share.targetAuthorIds : [],
           pausedByTeacher: Boolean(share.pausedByTeacher),
           viewerCount: share.watchers.size,
         }
@@ -2023,11 +2026,16 @@ io.on('connection', (socket) => {
       if (!cleanAuthor) throw new Error('Ingresa tu nombre para encolarte.');
       if (!cleanReason) throw new Error('Ingresa el motivo para compartir tu pantalla.');
 
+      const audience = ['all', 'teacher', 'custom'].includes(payload?.audience) ? payload.audience : 'all';
+      const targetAuthorIds = Array.isArray(payload?.targetAuthorIds) ? payload.targetAuthorIds.map(String).slice(0, 50) : [];
+
       const queue = getSessionQueue(session.id);
       const existing = queue.find((q) => q.authorId === cleanAuthorId);
       if (existing) {
         existing.author = cleanAuthor;
         existing.reason = cleanReason;
+        existing.audience = audience;
+        existing.targetAuthorIds = targetAuthorIds;
         broadcastScreenQueue(session.id);
         if (typeof ack === 'function') ack({ ok: true, entry: existing, updated: true });
         return;
@@ -2038,6 +2046,8 @@ io.on('connection', (socket) => {
         authorId: cleanAuthorId,
         author: cleanAuthor,
         reason: cleanReason,
+        audience,
+        targetAuthorIds,
         status: 'waiting',
         createdAt: new Date().toISOString(),
       };
@@ -2092,6 +2102,8 @@ io.on('connection', (socket) => {
           queueId: entry.id,
           author: entry.author,
           reason: entry.reason,
+          audience: entry.audience || 'all',
+          targetAuthorIds: entry.targetAuthorIds || [],
           teacherName: teacherName || 'Profesor',
         });
       });
@@ -2131,7 +2143,7 @@ io.on('connection', (socket) => {
   socket.on('screen:start', (payload, ack) => {
     try {
       const session = assertSessionWritable(socket, payload?.teacherToken);
-      const { postId, authorId, authorName } = payload || {};
+      const { postId, authorId, authorName, sourceType, audience = 'all', targetAuthorIds = [] } = payload || {};
       const post = store.getPostById(postId, session.id);
       if (!post) throw new Error('La tarjeta no existe en esta sesión.');
 
@@ -2146,6 +2158,9 @@ io.on('connection', (socket) => {
         sharerSocketId: socket.id,
         sharerAuthorId,
         sharerName: authorName || post.author,
+        sourceType: sourceType || 'screen',
+        audience, // 'all' | 'teacher' | 'custom'
+        targetAuthorIds: Array.isArray(targetAuthorIds) ? targetAuthorIds : [],
         pausedByTeacher: false,
         watchers: new Set(),
       };
@@ -2163,6 +2178,9 @@ io.on('connection', (socket) => {
         sharerSocketId: share.sharerSocketId,
         sharerAuthorId: share.sharerAuthorId,
         sharerName: share.sharerName,
+        sourceType: share.sourceType,
+        audience: share.audience,
+        targetAuthorIds: share.targetAuthorIds,
         pausedByTeacher: false,
         viewerCount: 0,
       });
@@ -2184,10 +2202,20 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('screen:watch', ({ postId } = {}) => {
+  socket.on('screen:watch', ({ postId, authorId } = {}) => {
     try {
       const share = activeShares.get(postId);
       if (!share || share.sharerSocketId === socket.id) return;
+
+      const isTeacher = Boolean(socket.data.isTeacher);
+      if (share.audience === 'teacher' && !isTeacher) {
+        return; // Transmisión privada solo para el profesor
+      }
+      if (share.audience === 'custom' && !isTeacher) {
+        if (!authorId || !share.targetAuthorIds.includes(authorId)) {
+          return; // No está en la lista de alumnos/profesores autorizados
+        }
+      }
 
       share.watchers.add(socket.id);
       io.to(share.sharerSocketId).emit('screen:watcher-joined', {
