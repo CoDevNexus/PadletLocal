@@ -2472,6 +2472,47 @@ body.mode-easy .form-group textarea {
   padding: 12px 14px;
 }
 
+/* --- View Layout Control (Canva vs Lista) --- */
+.view-layout-control {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  gap: 2px;
+}
+
+.layout-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.layout-btn svg {
+  flex-shrink: 0;
+}
+
+.layout-btn:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.layout-btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+
 /* --- Auto-Compact Grid & Click-to-Grow Card --- */
 .density-control {
   display: inline-flex;
@@ -2509,8 +2550,196 @@ body.mode-easy .form-group textarea {
 }
 
 .board-grid.board-grid--compact {
-  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
-  gap: 13px;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  gap: 12px;
+}
+
+.board-grid.board-grid--large {
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 24px;
+}
+
+.board-grid--large .card-header {
+  padding: 16px 18px 8px;
+}
+
+.board-grid--large .card-body {
+  padding: 8px 18px 14px;
+  font-size: 1.02rem;
+}
+
+.board-grid--large .card-image-wrap img {
+  max-height: 250px;
+}
+
+/* --- Mode: List View (Lista compacta de publicaciones) --- */
+.board-grid.board-view--list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+}
+
+.board-grid.board-view--list .card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  min-height: 54px;
+  border-radius: 10px;
+  animation: cardIn 0.18s ease-out;
+  transform: none !important;
+}
+
+.board-grid.board-view--list .card:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: var(--shadow-card-hover);
+}
+
+.board-grid.board-view--list .card-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  height: 100%;
+  border-radius: 10px 0 0 10px;
+}
+
+.board-grid.board-view--list .card-header {
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  max-width: 200px;
+  border: none;
+}
+
+.board-grid.board-view--list .card-header .avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 0.72rem;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.board-grid.board-view--list .card-header .author-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.board-grid.board-view--list .card-header .author-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-grid.board-view--list .card-header .post-time {
+  font-size: 0.70rem;
+  color: var(--text-muted);
+}
+
+.board-grid.board-view--list .card-header .card-header-actions {
+  display: none;
+}
+
+.board-grid.board-view--list .card-body {
+  padding: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.board-grid.board-view--list .card-body .card-text-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.board-grid.board-view--list .card-topic {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 2px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.board-grid.board-view--list .card-content {
+  font-size: 0.84rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  margin: 0;
+}
+
+.board-grid.board-view--list .card-image-wrap {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.board-grid.board-view--list .card-image-wrap img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.board-grid.board-view--list .card-file-chip {
+  margin: 0;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.board-grid.board-view--list .card-footer {
+  padding: 0;
+  border-top: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.board-grid.board-view--list .card-footer .action-chip {
+  padding: 4px 8px;
+  font-size: 0.74rem;
+}
+
+.board-grid.board-view--list .card-comments-slot {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .board-grid.board-view--list .card {
+    grid-template-columns: 1fr auto;
+    row-gap: 8px;
+    padding: 10px 12px;
+  }
+  .board-grid.board-view--list .card-body {
+    grid-column: 1 / -1;
+  }
+  .board-grid.board-view--list .card-topic {
+    max-width: 120px;
+  }
 }
 
 .board-grid--compact .card:not(.card-focused):not(.card-expanded) {
@@ -3082,9 +3311,61 @@ body.mode-easy .form-group textarea {
 
 .screens-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
   align-items: start;
+}
+
+/* Compact screens mode (pantallas pequeñas para ahorro de espacio) */
+.screens-grid.screens-grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.screens-grid.screens-grid--compact .screen-stage {
+  aspect-ratio: 16 / 9;
+  max-height: 165px;
+}
+
+.screens-grid.screens-grid--compact .card-header {
+  padding: 8px 10px 4px;
+}
+
+.screens-grid.screens-grid--compact .card-body {
+  padding: 4px 8px 8px;
+}
+
+/* Normal screens mode (pantallas medianas) */
+.screens-grid.screens-grid--normal {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+}
+
+.screens-grid.screens-grid--normal .screen-stage {
+  aspect-ratio: 16 / 9;
+  max-height: 250px;
+}
+
+/* Large / Theater screens mode (pantallas grandes / modo teatro) */
+.screens-grid.screens-grid--large {
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.screens-grid.screens-grid--large .screen-stage {
+  aspect-ratio: 16 / 9;
+  max-height: 520px;
+}
+
+/* Expanded individual screen card (click o botón para agrandar individualmente) */
+.screens-grid .card.card-expanded {
+  grid-column: 1 / -1 !important;
+  z-index: 5;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+}
+
+.screens-grid .card.card-expanded .screen-stage {
+  max-height: 520px;
 }
 
 .empty-state-compact {
@@ -3101,7 +3382,10 @@ body.mode-easy .form-group textarea {
   .screens-layout {
     grid-template-columns: 1fr;
   }
-  .screens-grid {
+  .screens-grid,
+  .screens-grid.screens-grid--compact,
+  .screens-grid.screens-grid--normal,
+  .screens-grid.screens-grid--large {
     grid-template-columns: 1fr;
   }
 }

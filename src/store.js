@@ -513,6 +513,45 @@ class BoardStore {
     return post;
   }
 
+  updateAuthorName(authorId, newName) {
+    if (!authorId || !newName) return false;
+    const cleanName = String(newName).trim().slice(0, 50);
+    if (!cleanName) return false;
+    let modified = false;
+
+    for (const session of this.data.sessions) {
+      if (Array.isArray(session.posts)) {
+        for (const p of session.posts) {
+          if (p.authorId === authorId && p.author !== cleanName) {
+            p.author = cleanName;
+            modified = true;
+          }
+          if (Array.isArray(p.comments)) {
+            for (const c of p.comments) {
+              if (c.authorId === authorId && c.author !== cleanName) {
+                c.author = cleanName;
+                modified = true;
+              }
+            }
+          }
+        }
+      }
+      if (Array.isArray(session.chatMessages)) {
+        for (const m of session.chatMessages) {
+          if ((m.authorId === authorId || m.fromId === authorId) && m.author !== cleanName) {
+            m.author = cleanName;
+            modified = true;
+          }
+        }
+      }
+    }
+
+    if (modified) {
+      this.save();
+    }
+    return modified;
+  }
+
   updatePost(
     id,
     { authorId, topic, content, color, imageUrl, imageName, removeImage, force = false },

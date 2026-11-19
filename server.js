@@ -1044,6 +1044,59 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Real-Time Name Change for Students & Teachers
+  socket.on('client:name-change', ({ authorId, newName, isTeacher, teacherToken } = {}, ack) => {
+    try {
+      const cleanName = String(newName || '').trim().slice(0, 50);
+      if (!cleanName) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'El nombre no puede estar vacío.' });
+        return;
+      }
+      const nowTeacher = isValidTeacherToken(teacherToken) || Boolean(isTeacher && socket.data.isTeacher);
+      const targetAuthorId = String(authorId || socket.data.authorId || socket.id).slice(0, 80);
+
+      socket.data.authorId = targetAuthorId;
+      if (nowTeacher) {
+        socket.data.teacherName = cleanName;
+        socket.data.isTeacher = true;
+      } else {
+        socket.data.authorName = cleanName;
+      }
+
+      const clientInfo = connectedClients.get(socket.id);
+      if (clientInfo) {
+        clientInfo.name = cleanName;
+        clientInfo.isTeacher = nowTeacher;
+        clientInfo.role = nowTeacher ? 'teacher' : 'student';
+      }
+
+      // Update in persistent store (posts, comments, chat)
+      store.updateAuthorName(targetAuthorId, cleanName);
+
+      const sid = socket.data.sessionId;
+      if (sid) {
+        broadcastPresence(sid);
+
+        io.to(sessionRoom(sid)).emit('author:name-changed', {
+          authorId: targetAuthorId,
+          newName: cleanName,
+          isTeacher: nowTeacher,
+        });
+
+        const session = store.getSessionById(sid);
+        if (session && Array.isArray(session.posts)) {
+          io.to(sessionRoom(sid)).emit('board:posts-updated', {
+            posts: session.posts.map(enrichPost),
+          });
+        }
+      }
+
+      if (typeof ack === 'function') ack({ ok: true, name: cleanName });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
   // Any user or teacher joins a chosen session
   socket.on('session:join', ({ sessionId, teacherToken } = {}, ack) => {
     try {

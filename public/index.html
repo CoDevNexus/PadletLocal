@@ -675,7 +675,14 @@
             <h3>🖥️ Pantallas compartidas</h3>
             <span id="screensCountLabel" class="muted-note">0 en vivo</span>
           </div>
-          <button id="btnShareScreenFromTab" class="btn btn-sm btn-primary">🖥️ Compartir mi pantalla</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div class="density-control" id="screensDensityControl" role="group" title="Tamaño de las pantallas">
+              <button type="button" class="density-btn active" data-screen-size="compact" title="Pantallas pequeñas">Pequeño</button>
+              <button type="button" class="density-btn" data-screen-size="normal" title="Pantallas medianas">Mediano</button>
+              <button type="button" class="density-btn" data-screen-size="large" title="Pantallas grandes / Teatro">Teatro</button>
+            </div>
+            <button id="btnShareScreenFromTab" class="btn btn-sm btn-primary">🖥️ Compartir mi pantalla</button>
+          </div>
         </div>
 
         <div id="screensEmptyState" class="empty-state empty-state-compact">
@@ -702,12 +709,37 @@
           <!-- Populated dynamically -->
         </div>
         <div class="toolbar-meta">
-          <div class="density-control advanced-only" id="densityControl" role="group" title="Tamaño de las tarjetas">
-            <button type="button" class="density-btn active" data-density="auto" title="Automático: compacto cuando hay 6 o más respuestas">Auto</button>
-            <button type="button" class="density-btn" data-density="compact" title="Tarjetas pequeñas (clic para agrandar)">Pequeño</button>
-            <button type="button" class="density-btn" data-density="normal" title="Tarjetas grandes">Normal</button>
+          <!-- Modo de Visualización: Canva vs Lista -->
+          <div class="view-layout-control" id="viewLayoutControl" role="group" aria-label="Modo de visualización: Canva o Lista">
+            <button type="button" class="layout-btn active" data-layout="canva" title="Modo Canva / Mosaico de tarjetas">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <span>Canva</span>
+            </button>
+            <button type="button" class="layout-btn" data-layout="list" title="Modo Lista compacta">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+              <span>Lista</span>
+            </button>
           </div>
-          <span id="compactHint" class="compact-hint hidden">Clic en una tarjeta para agrandarla</span>
+
+          <!-- Tamaño de las tarjetas: Pequeño / Mediano / Grande -->
+          <div class="density-control" id="densityControl" role="group" title="Tamaño de las tarjetas">
+            <button type="button" class="density-btn" data-density="compact" title="Tarjetas pequeñas (ahorro de espacio)">Pequeño</button>
+            <button type="button" class="density-btn active" data-density="normal" title="Tarjetas tamaño mediano estándar">Mediano</button>
+            <button type="button" class="density-btn" data-density="large" title="Tarjetas tamaño grande">Grande</button>
+          </div>
+          <span id="compactHint" class="compact-hint hidden">Clic en tarjeta para agrandar</span>
           <span id="postCounter" class="post-counter">0 publicaciones</span>
         </div>
       </div>

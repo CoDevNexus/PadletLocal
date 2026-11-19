@@ -199,6 +199,8 @@
   const STORAGE_TEACHER_NAME_KEY = 'padletlocal_teacher_name';
   const STORAGE_UI_MODE_KEY = 'padletlocal_ui_mode';
   const STORAGE_DENSITY_KEY = 'padletlocal_density_mode';
+  const STORAGE_VIEW_LAYOUT_KEY = 'padletlocal_view_layout'; // 'canva' | 'list'
+  const STORAGE_SCREENS_SIZE_KEY = 'padletlocal_screens_size'; // 'compact' | 'normal' | 'large'
   const AUTO_COMPACT_THRESHOLD = 6;
 
   let authorId = localStorage.getItem(STORAGE_ID_KEY);
@@ -239,7 +241,9 @@
     scheduledTimers: [],
     soundEnabled: localStorage.getItem(STORAGE_SOUND_KEY) !== 'false',
     uiMode: localStorage.getItem(STORAGE_UI_MODE_KEY) || 'full', // 'easy' | 'full'
-    densityMode: localStorage.getItem(STORAGE_DENSITY_KEY) || 'auto', // 'auto' | 'compact' | 'normal'
+    viewLayout: localStorage.getItem(STORAGE_VIEW_LAYOUT_KEY) || 'canva', // 'canva' | 'list'
+    screensSize: localStorage.getItem(STORAGE_SCREENS_SIZE_KEY) || 'compact', // 'compact' | 'normal' | 'large'
+    densityMode: localStorage.getItem(STORAGE_DENSITY_KEY) || 'normal', // 'compact' | 'normal' | 'large'
     focusedCardId: null,
     pendingResumePostId: null,
     pendingTurnGrant: null, // { queueId, author, reason }
@@ -300,6 +304,8 @@
     btnEasyShare: document.getElementById('btnEasyShare'),
     btnEasyHelp: document.getElementById('btnEasyHelp'),
     densityControl: document.getElementById('densityControl'),
+    viewLayoutControl: document.getElementById('viewLayoutControl'),
+    screensDensityControl: document.getElementById('screensDensityControl'),
     compactHint: document.getElementById('compactHint'),
     resumeScreenModal: document.getElementById('resumeScreenModal'),
     resumeScreenText: document.getElementById('resumeScreenText'),
@@ -743,13 +749,23 @@
     }
   }
 
-  function setAuthorName(name) {
+  function setAuthorName(name, broadcast = true) {
     const clean = String(name || '').trim().slice(0, 50);
     if (!clean) return;
+    const oldName = authorName;
     authorName = clean;
     localStorage.setItem(STORAGE_NAME_KEY, authorName);
     updateUserChipUI();
     updateStudentMenuUI();
+
+    if (broadcast && oldName !== clean && socket && socket.connected) {
+      socket.emit('client:name-change', {
+        authorId,
+        newName: clean,
+        isTeacher: state.isTeacher,
+        teacherToken: state.teacherToken,
+      });
+    }
   }
 
   updateUserChipUI();
@@ -1291,6 +1307,17 @@
 
       state.teacherName = newName;
       localStorage.setItem(STORAGE_TEACHER_NAME_KEY, newName);
+      authorName = newName;
+      localStorage.setItem(STORAGE_NAME_KEY, newName);
+
+      if (socket && socket.connected) {
+        socket.emit('client:name-change', {
+          authorId,
+          newName,
+          isTeacher: true,
+          teacherToken: state.teacherToken,
+        });
+      }
 
       closeModal(el.teacherSettingsModal);
       updateTeacherUI();
@@ -2361,6 +2388,7 @@
       }
     });
 
+    updateScreensDensity();
     updateWorkspaceTabBadges();
   }
 
@@ -3024,6 +3052,60 @@
     renderScreensGrid();
   });
 
+  socket.on('author:name-changed', ({ authorId: changedAuthorId, newName, isTeacher: changedIsTeacher }) => {
+    let updatedAny = false;
+    state.posts.forEach((p) => {
+      if (p.authorId === changedAuthorId) {
+        p.author = newName;
+        updatedAny = true;
+      }
+      if (Array.isArray(p.comments)) {
+        p.comments.forEach((c) => {
+          if (c.authorId === changedAuthorId) {
+            c.author = newName;
+            updatedAny = true;
+          }
+        });
+      }
+      if (p.screenShare && p.screenShare.sharerAuthorId === changedAuthorId) {
+        p.screenShare.sharerName = newName;
+      }
+    });
+
+    if (changedIsTeacher) {
+      if (el.teacherBadgeText) el.teacherBadgeText.textContent = `Prof. ${newName}`;
+      if (el.teacherMenuNameDisplay) el.teacherMenuNameDisplay.textContent = newName;
+      if (state.isTeacher && changedAuthorId === authorId) {
+        state.teacherName = newName;
+        updateTeacherUI();
+      }
+    }
+
+    if (updatedAny) {
+      renderBoardFull();
+      renderScreensGrid();
+    }
+
+    if (state.isChatOpen) {
+      socket.emit('chat:history', { sessionId: state.activeSessionId }, (res) => {
+        if (res?.ok && Array.isArray(res.messages)) renderChatMessages(res.messages);
+      });
+    }
+
+    if (changedAuthorId !== authorId) {
+      showToast(`👤 ${newName} actualizó su nombre`, 'info');
+    }
+  });
+
+  socket.on('board:posts-updated', ({ posts }) => {
+    if (Array.isArray(posts)) {
+      state.posts = posts;
+      renderBoardFull();
+      renderScreensGrid();
+      updatePostCounter();
+    }
+  });
+
   socket.on('post:deleted', ({ id }) => {
     const deleted = state.posts.find((p) => p.id === id);
     state.posts = state.posts.filter((p) => p.id !== id);
@@ -3237,21 +3319,48 @@
   function updateBoardDensity(visibleCount) {
     const count =
       typeof visibleCount === 'number' ? visibleCount : getPadletPosts().filter(matchesCurrentFilters).length;
-    const isCompact =
-      state.densityMode === 'compact' ||
-      (state.densityMode === 'auto' && count >= AUTO_COMPACT_THRESHOLD);
+
+    // Canva vs Lista view mode
+    const isList = state.viewLayout === 'list';
+    el.boardGrid.classList.toggle('board-view--list', isList);
+
+    if (el.viewLayoutControl) {
+      el.viewLayoutControl.querySelectorAll('.layout-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.layout === state.viewLayout);
+      });
+    }
+
+    // Card density: compact / normal / large
+    const isCompact = state.densityMode === 'compact';
+    const isLarge = state.densityMode === 'large';
 
     el.boardGrid.classList.toggle('board-grid--compact', isCompact);
-    el.compactHint.classList.toggle('hidden', !isCompact || count === 0);
+    el.boardGrid.classList.toggle('board-grid--large', isLarge);
+    el.compactHint.classList.toggle('hidden', isList || !isCompact || count === 0);
 
     if (!isCompact && state.focusedCardId) {
       state.focusedCardId = null;
       el.boardGrid.querySelectorAll('.card.card-focused').forEach((c) => c.classList.remove('card-focused'));
     }
 
-    el.densityControl.querySelectorAll('.density-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.density === state.densityMode);
-    });
+    if (el.densityControl) {
+      el.densityControl.querySelectorAll('.density-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.density === state.densityMode);
+      });
+    }
+  }
+
+  function updateScreensDensity() {
+    const size = state.screensSize || 'compact';
+    el.screensGrid.classList.toggle('screens-grid--compact', size === 'compact');
+    el.screensGrid.classList.toggle('screens-grid--normal', size === 'normal');
+    el.screensGrid.classList.toggle('screens-grid--large', size === 'large');
+
+    if (el.screensDensityControl) {
+      el.screensDensityControl.querySelectorAll('.density-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.screenSize === size);
+      });
+    }
   }
 
   function updatePostCounter() {
@@ -3755,6 +3864,20 @@
         !e.target.closest('a, button, input, textarea, form, video')
       ) {
         setFocusedCard(postId);
+      } else if (
+        cardEl.parentElement === el.screensGrid &&
+        !e.target.closest('a, button, input, textarea, form')
+      ) {
+        if (state.expandedCards.has(postId)) {
+          state.expandedCards.delete(postId);
+        } else {
+          state.expandedCards.add(postId);
+        }
+        cardEl.classList.toggle('card-expanded', state.expandedCards.has(postId));
+        const expBtn = cardEl.querySelector('[data-action="toggle-expand"]');
+        if (expBtn) {
+          expBtn.textContent = state.expandedCards.has(postId) ? '⤡ Reducir' : '⤢ Ampliar';
+        }
       }
       return;
     }
@@ -4584,6 +4707,23 @@
     updateBoardDensity();
   });
 
+  el.viewLayoutControl?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.layout-btn');
+    if (!btn) return;
+    state.viewLayout = btn.dataset.layout || 'canva';
+    localStorage.setItem(STORAGE_VIEW_LAYOUT_KEY, state.viewLayout);
+    updateBoardDensity();
+    showToast(state.viewLayout === 'list' ? '📋 Modo Lista activado' : '🎨 Modo Canva activado', 'info');
+  });
+
+  el.screensDensityControl?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.density-btn');
+    if (!btn) return;
+    state.screensSize = btn.dataset.screenSize || 'compact';
+    localStorage.setItem(STORAGE_SCREENS_SIZE_KEY, state.screensSize);
+    updateScreensDensity();
+  });
+
   el.btnAcceptResumeScreen.addEventListener('click', async () => {
     const postId = state.pendingResumePostId;
     const turnGrant = state.pendingTurnGrant;
@@ -4614,6 +4754,8 @@
 
   applyUiMode(state.uiMode);
   applyWorkspaceView(state.workspaceView);
+  updateBoardDensity();
+  updateScreensDensity();
 
   // --- Header & Toolbar Listeners ---
   el.btnNewPost?.addEventListener('click', () => openComposerForCreate());
