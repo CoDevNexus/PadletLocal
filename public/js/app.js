@@ -247,13 +247,25 @@
   const STORAGE_DENSITY_KEY = 'padletlocal_density_mode';
   const STORAGE_VIEW_LAYOUT_KEY = 'padletlocal_view_layout'; // 'canva' | 'list'
   const STORAGE_SCREENS_SIZE_KEY = 'padletlocal_screens_size'; // 'compact' | 'normal' | 'large'
+  const STORAGE_TEACHER_ID_KEY = 'padletlocal_teacher_author_id';
   const AUTO_COMPACT_THRESHOLD = 6;
 
-  let authorId = localStorage.getItem(STORAGE_ID_KEY);
-  if (!authorId) {
-    authorId = 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4);
-    localStorage.setItem(STORAGE_ID_KEY, authorId);
+  let studentAuthorId = localStorage.getItem(STORAGE_ID_KEY);
+  if (!studentAuthorId) {
+    studentAuthorId = 'usr_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4);
+    localStorage.setItem(STORAGE_ID_KEY, studentAuthorId);
   }
+
+  let teacherAuthorId = localStorage.getItem(STORAGE_TEACHER_ID_KEY);
+  if (!teacherAuthorId) {
+    teacherAuthorId = 'tch_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).slice(-4);
+    localStorage.setItem(STORAGE_TEACHER_ID_KEY, teacherAuthorId);
+  }
+
+  function getEffectiveAuthorId() {
+    return state?.isTeacher ? teacherAuthorId : studentAuthorId;
+  }
+  let authorId = studentAuthorId;
   let authorName = localStorage.getItem(STORAGE_NAME_KEY) || '';
   if (!authorName || !authorName.trim() || authorName === 'Anónimo' || authorName === 'Sin nombre') {
     const randomNum = Math.floor(100 + Math.random() * 900);
@@ -479,6 +491,16 @@
     chatRecipientSelect: document.getElementById('chatRecipientSelect'),
     chatPrivacyNote: document.getElementById('chatPrivacyNote'),
     chatMessagesList: document.getElementById('chatMessagesList'),
+    chatImagePreviewRow: document.getElementById('chatImagePreviewRow'),
+    chatImagePreviewThumb: document.getElementById('chatImagePreviewThumb'),
+    chatImagePreviewName: document.getElementById('chatImagePreviewName'),
+    btnCancelChatImage: document.getElementById('btnCancelChatImage'),
+    chatFileInput: document.getElementById('chatFileInput'),
+    btnChatAttachImage: document.getElementById('btnChatAttachImage'),
+    btnChatEmoji: document.getElementById('btnChatEmoji'),
+    chatEmojiPicker: document.getElementById('chatEmojiPicker'),
+    btnCloseEmojiPicker: document.getElementById('btnCloseEmojiPicker'),
+    chatEmojiGrid: document.getElementById('chatEmojiGrid'),
     chatForm: document.getElementById('chatForm'),
     chatInputText: document.getElementById('chatInputText'),
     btnSendChat: document.getElementById('btnSendChat'),
@@ -959,21 +981,50 @@
   }
 
   async function promptChangeNick() {
+    const currentName = state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno');
     const res = await Swal.prompt(
       '✏️ Cambiar mi nombre / apodo',
-      'Ingresa tu nuevo nombre o apodo para la clase. Tus mensajes, publicaciones y en la lista de conectados se actualizarán de inmediato manteniendo tu identidad:',
+      state.isTeacher
+        ? 'Ingresa tu nombre o título como docente para la clase. Se actualizará en el encabezado, chat y publicaciones:'
+        : 'Ingresa tu nuevo nombre o apodo para la clase. Tus mensajes, publicaciones y en la lista de conectados se actualizarán de inmediato manteniendo tu identidad:',
       {
-        inputValue: authorName,
-        inputPlaceholder: 'Ej. Juan Pérez, María G., etc.',
+        inputValue: currentName,
+        inputPlaceholder: state.isTeacher ? 'Ej. Prof. García, Lic. María, etc.' : 'Ej. Juan Pérez, María G., etc.',
         confirmButtonText: 'Guardar nombre',
         confirmButtonColor: '#6366f1',
       }
     );
     if (!res || !res.trim()) return;
     const newNick = res.trim().slice(0, 50);
-    if (newNick === authorName) return;
-    setAuthorName(newNick, true);
-    showToast(`Tu nombre se actualizó a: "${newNick}"`, 'success');
+    if (newNick === currentName) return;
+
+    if (state.isTeacher) {
+      state.teacherName = newNick;
+      localStorage.setItem(STORAGE_TEACHER_NAME_KEY, newNick);
+      updateTeacherMenuUI();
+      if (el.chatCurrentUserName) el.chatCurrentUserName.textContent = newNick;
+      if (socket && socket.connected) {
+        socket.emit('client:name-change', {
+          authorId: getEffectiveAuthorId(),
+          newName: newNick,
+          isTeacher: true,
+          teacherToken: state.teacherToken,
+        });
+        socket.emit('client:register', {
+          authorId: getEffectiveAuthorId(),
+          authorName: newNick,
+          isTeacher: true,
+          teacherToken: state.teacherToken,
+          teacherName: newNick,
+        });
+      }
+      showToast(`Nombre de docente actualizado a: "${newNick}"`, 'success');
+    } else {
+      setAuthorName(newNick, true);
+      showToast(`Tu nombre se actualizó a: "${newNick}"`, 'success');
+    }
+    renderChatUsers(state.chatUsers);
+    renderConversationsList();
   }
 
   updateUserChipUI();
@@ -1069,6 +1120,7 @@
         state.isTeacher = false;
         sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
       }
+      authorId = getEffectiveAuthorId();
       if (socket && socket.connected) {
         socket.emit('client:register', {
           authorId,
@@ -1238,9 +1290,15 @@
 
       state.teacherToken = data.token;
       state.isTeacher = true;
+      authorId = getEffectiveAuthorId();
       sessionStorage.setItem(STORAGE_TEACHER_TOKEN_KEY, data.token);
       closeModal(el.teacherLoginModal);
-      socket.emit('client:register', { authorId, teacherToken: state.teacherToken });
+      socket.emit('client:register', {
+        authorId,
+        authorName: state.teacherName || 'Docente',
+        teacherToken: state.teacherToken,
+        teacherName: state.teacherName || 'Docente',
+      });
       updateTeacherUI();
       showToast(`¡Bienvenido, ${state.teacherName}! Modo Docente activado.`, 'success');
       const targetTab = state.pendingTeacherTab || 'assignment';
@@ -1257,9 +1315,15 @@
   el.btnTeacherLogout.addEventListener('click', () => {
     state.teacherToken = '';
     state.isTeacher = false;
+    authorId = getEffectiveAuthorId();
     sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
     closeModal(el.teacherPanelModal);
-    socket.emit('client:register', { authorId, teacherToken: '' });
+    socket.emit('client:register', {
+      authorId,
+      authorName: authorName || 'Alumno',
+      teacherToken: '',
+      teacherName: '',
+    });
     updateTeacherUI();
     showToast('Saliste del modo Docente');
   });
@@ -2886,6 +2950,7 @@
   socket.on('connect', () => {
     state.socketId = socket.id;
     el.connectionDot.classList.remove('offline');
+    authorId = getEffectiveAuthorId();
     socket.emit('client:register', {
       authorId,
       authorName: state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno'),
@@ -6889,6 +6954,7 @@
 
       setAuthorName(name);
       state.isTeacher = false;
+      authorId = getEffectiveAuthorId();
       state.teacherToken = '';
       sessionStorage.removeItem(STORAGE_TEACHER_TOKEN_KEY);
       sessionStorage.setItem(STORAGE_ROLE_KEY, 'student');
@@ -6950,6 +7016,7 @@
         localStorage.setItem(STORAGE_TEACHER_NAME_KEY, enteredName);
         state.teacherToken = data.token;
         state.isTeacher = true;
+        authorId = getEffectiveAuthorId();
         sessionStorage.setItem(STORAGE_TEACHER_TOKEN_KEY, data.token);
         sessionStorage.setItem(STORAGE_ROLE_KEY, 'teacher');
         state.hasChosenSession = true;
@@ -7233,6 +7300,14 @@
     renderConversationsList();
   }
 
+  function formatChatSummary(m, defaultText) {
+    if (!m) return defaultText;
+    const author = m.authorName || (m.isTeacher ? 'Docente' : 'Alumno');
+    if (m.imageUrl && !m.text) return `${author}: 📷 [Imagen]`;
+    if (m.imageUrl && m.text) return `${author}: 📷 ${m.text}`;
+    return `${author}: ${m.text || ''}`;
+  }
+
   function renderConversationsList() {
     if (!el.chatConversationsList) return;
 
@@ -7251,7 +7326,7 @@
       avatarBg: '#3b82f6',
       avatarContent: '📢',
       isOnline: true,
-      lastMsg: lastAll ? `${lastAll.authorName || 'Alguien'}: ${lastAll.text}` : 'Canal público de la sesión de clase',
+      lastMsg: formatChatSummary(lastAll, 'Canal público de la sesión de clase'),
       lastTime: lastAll ? formatRelativeTime(lastAll.createdAt) : '',
       lastTimestamp: lastAll ? lastAll.timestamp || 0 : 1,
       unread: state.unreadByThread['all'] || 0,
@@ -7269,7 +7344,7 @@
         avatarBg: '#6366f1',
         avatarContent: '🎓',
         isOnline: teacherOnline,
-        lastMsg: lastTeacher ? `${lastTeacher.authorName || 'Docente'}: ${lastTeacher.text}` : 'Chat privado e independiente con el profesor',
+        lastMsg: formatChatSummary(lastTeacher, 'Chat privado e independiente con el profesor'),
         lastTime: lastTeacher ? formatRelativeTime(lastTeacher.createdAt) : '',
         lastTimestamp: lastTeacher ? lastTeacher.timestamp || 0 : 2,
         unread: state.unreadByThread['teachers'] || 0,
@@ -7325,7 +7400,7 @@
         avatarBg: color,
         avatarContent: escapeHtml(initials),
         isOnline,
-        lastMsg: lastMsg ? `${lastMsg.authorName || 'Alguien'}: ${lastMsg.text}` : 'Toca para iniciar una conversación privada',
+        lastMsg: formatChatSummary(lastMsg, 'Toca para iniciar una conversación privada'),
         lastTime: lastMsg ? formatRelativeTime(lastMsg.createdAt) : '',
         lastTimestamp: lastMsg ? lastMsg.timestamp || 0 : 0,
         unread: state.unreadByThread[threadKey] || 0,
@@ -7488,6 +7563,14 @@
         const deleteBtn = isOutgoing
           ? `<button type="button" class="btn-chat-delete-msg" data-msg-id="${escapeHtml(m.id)}" title="Eliminar mi mensaje">🗑️</button>`
           : '';
+        const imgHtml = m.imageUrl
+          ? `
+            <div class="chat-bubble-img-wrap" data-img-src="${escapeHtml(m.imageUrl)}" data-img-author="${escapeHtml(m.authorName || 'Usuario')}" title="Clic para ver imagen completa">
+              <img src="${escapeHtml(m.imageUrl)}" class="chat-bubble-img" alt="Imagen enviada" loading="lazy" />
+            </div>
+          `
+          : '';
+        const textHtml = m.text ? `<p class="chat-bubble-text">${formatTextWithLinks(m.text)}</p>` : '';
 
         return `
           <div class="chat-bubble ${isOutgoing ? 'is-outgoing' : 'is-incoming'} ${isPriv ? 'is-private' : ''}">
@@ -7501,7 +7584,8 @@
               <span class="chat-bubble-time">${formatRelativeTime(m.createdAt)}</span>
               ${deleteBtn}
             </div>
-            <p class="chat-bubble-text">${formatTextWithLinks(m.text)}</p>
+            ${imgHtml}
+            ${textHtml}
           </div>
         `;
       })
@@ -7547,6 +7631,14 @@
       const deleteBtn = isOutgoing
         ? `<button type="button" class="btn-chat-delete-msg" data-msg-id="${escapeHtml(msg.id)}" title="Eliminar mi mensaje">🗑️</button>`
         : '';
+      const imgHtml = msg.imageUrl
+        ? `
+          <div class="chat-bubble-img-wrap" data-img-src="${escapeHtml(msg.imageUrl)}" data-img-author="${escapeHtml(msg.authorName || 'Usuario')}" title="Clic para ver imagen completa">
+            <img src="${escapeHtml(msg.imageUrl)}" class="chat-bubble-img" alt="Imagen enviada" loading="lazy" />
+          </div>
+        `
+        : '';
+      const textHtml = msg.text ? `<p class="chat-bubble-text">${formatTextWithLinks(msg.text)}</p>` : '';
 
       const bubble = document.createElement('div');
       bubble.className = `chat-bubble ${isOutgoing ? 'is-outgoing' : 'is-incoming'} ${
@@ -7563,7 +7655,8 @@
           <span class="chat-bubble-time">${formatRelativeTime(msg.createdAt)}</span>
           ${deleteBtn}
         </div>
-        <p class="chat-bubble-text">${formatTextWithLinks(msg.text)}</p>
+        ${imgHtml}
+        ${textHtml}
       `;
       el.chatMessagesList.appendChild(bubble);
       el.chatMessagesList.scrollTop = el.chatMessagesList.scrollHeight;
@@ -7581,7 +7674,8 @@
           playChime('info');
         }
         const sender = msg.authorName || (msg.isTeacher ? 'Docente' : 'Alumno');
-        const shortSnippet = msg.text.length > 50 ? msg.text.slice(0, 47) + '...' : msg.text;
+        const rawSnippet = msg.text || (msg.imageUrl ? '📷 [Imagen adjunta]' : '');
+        const shortSnippet = rawSnippet.length > 50 ? rawSnippet.slice(0, 47) + '...' : rawSnippet;
         const mutedBadge = isThreadMuted ? '<span style="opacity:0.75;font-size:0.8rem;margin-left:4px;" title="Conversación silenciada">🔕</span>' : '';
         const toastHtml = `
           <div style="display:flex;align-items:center;gap:8px;">
@@ -7767,8 +7861,22 @@
     markThreadAsRead(state.activeChatThread);
   });
 
-  // Message deletion: author can delete their own message
+  // Message list clicks: Image lightbox and message deletion
   el.chatMessagesList?.addEventListener('click', async (e) => {
+    // 1. Click on image inside bubble -> Open full size in Lightbox modal
+    const imgWrap = e.target.closest('.chat-bubble-img-wrap');
+    if (imgWrap) {
+      const src = imgWrap.dataset.imgSrc;
+      const author = imgWrap.dataset.imgAuthor;
+      if (src && el.lightboxModal && el.lightboxImg) {
+        el.lightboxImg.src = src;
+        if (el.lightboxCaption) el.lightboxCaption.textContent = `Imagen enviada por ${author}`;
+        openModal(el.lightboxModal);
+      }
+      return;
+    }
+
+    // 2. Author can delete their own message
     const btnDel = e.target.closest('.btn-chat-delete-msg');
     if (!btnDel) return;
     const msgId = btnDel.dataset.msgId;
@@ -7793,10 +7901,152 @@
     });
   });
 
-  el.chatForm?.addEventListener('submit', (e) => {
+  // =====================================================================
+  // CHAT IMAGES & EMOJIS SYSTEM
+  // =====================================================================
+  let pendingChatImageFile = null;
+
+  function setChatPendingImage(file) {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      showToast('Solo se permiten archivos de imagen (JPG, PNG, GIF, WebP)', 'error');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      showToast('La imagen no debe superar los 15 MB', 'error');
+      return;
+    }
+    pendingChatImageFile = file;
+    const objectUrl = URL.createObjectURL(file);
+    if (el.chatImagePreviewThumb) el.chatImagePreviewThumb.src = objectUrl;
+    if (el.chatImagePreviewName) el.chatImagePreviewName.textContent = file.name || 'captura_imagen.png';
+    if (el.chatImagePreviewRow) el.chatImagePreviewRow.classList.remove('hidden');
+    if (el.chatInputText) el.chatInputText.focus();
+  }
+
+  function clearChatPendingImage() {
+    pendingChatImageFile = null;
+    if (el.chatImagePreviewThumb) el.chatImagePreviewThumb.src = '';
+    if (el.chatImagePreviewRow) el.chatImagePreviewRow.classList.add('hidden');
+    if (el.chatFileInput) el.chatFileInput.value = '';
+  }
+
+  async function uploadChatImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error al subir la imagen al servidor');
+    }
+    const data = await res.json();
+    return data.imageUrl;
+  }
+
+  el.btnChatAttachImage?.addEventListener('click', () => {
+    el.chatFileInput?.click();
+  });
+
+  el.chatFileInput?.addEventListener('change', (e) => {
+    if (e.target.files?.[0]) {
+      setChatPendingImage(e.target.files[0]);
+    }
+  });
+
+  el.btnCancelChatImage?.addEventListener('click', clearChatPendingImage);
+
+  // Paste image directly from clipboard (e.g. Win + Shift + S or screenshots)
+  el.chatInputText?.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || window.clipboardData)?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type && item.type.indexOf('image') !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          setChatPendingImage(file);
+          showToast('📷 Imagen pegada del portapapeles lista para enviar', 'info');
+          break;
+        }
+      }
+    }
+  });
+
+  // Emojis Picker
+  const CHAT_EMOJIS = [
+    '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣',
+    '😊', '😇', '🙂', '😉', '😍', '🥰', '😘', '😋',
+    '😎', '🥳', '🤔', '🤫', '😴', '🤩', '😱', '🤯',
+    '👍', '👎', '👏', '🙌', '🤝', '✌️', '🤞', '✍️',
+    '🙋‍♂️', '🙋‍♀️', '🙏', '💡', '🔥', '⭐', '✨', '💯',
+    '📚', '📖', '📝', '✏️', '🎨', '💻', '📱', '🚀',
+    '❓', '❗', '✅', '❌', '⏳', '⏰', '❤️', '🎉'
+  ];
+
+  function initChatEmojiPicker() {
+    if (!el.chatEmojiGrid) return;
+    el.chatEmojiGrid.innerHTML = CHAT_EMOJIS.map(
+      (em) => `<button type="button" class="chat-emoji-btn" data-emoji="${em}" title="${em}">${em}</button>`
+    ).join('');
+
+    el.chatEmojiGrid.addEventListener('click', (e) => {
+      const btn = e.target.closest('.chat-emoji-btn');
+      if (!btn) return;
+      const emoji = btn.dataset.emoji;
+      if (!emoji || !el.chatInputText) return;
+
+      const input = el.chatInputText;
+      const start = input.selectionStart != null ? input.selectionStart : input.value.length;
+      const end = input.selectionEnd != null ? input.selectionEnd : input.value.length;
+      const text = input.value;
+      input.value = text.substring(0, start) + emoji + text.substring(end);
+      input.selectionStart = input.selectionEnd = start + emoji.length;
+      input.focus();
+    });
+
+    el.btnChatEmoji?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      el.chatEmojiPicker?.classList.toggle('hidden');
+    });
+
+    el.btnCloseEmojiPicker?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      el.chatEmojiPicker?.classList.add('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (el.chatEmojiPicker && !el.chatEmojiPicker.classList.contains('hidden')) {
+        if (!el.chatEmojiPicker.contains(e.target) && e.target !== el.btnChatEmoji) {
+          el.chatEmojiPicker.classList.add('hidden');
+        }
+      }
+    });
+  }
+
+  initChatEmojiPicker();
+
+  el.chatForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const text = el.chatInputText?.value?.trim();
-    if (!text) return;
+    const text = el.chatInputText?.value?.trim() || '';
+    if (!text && !pendingChatImageFile) return;
+
+    let imageUrl = null;
+    if (pendingChatImageFile) {
+      try {
+        if (el.btnSendChat) el.btnSendChat.disabled = true;
+        imageUrl = await uploadChatImage(pendingChatImageFile);
+      } catch (err) {
+        showToast(err.message || 'Error al subir la imagen', 'error');
+        if (el.btnSendChat) el.btnSendChat.disabled = false;
+        return;
+      } finally {
+        if (el.btnSendChat) el.btnSendChat.disabled = false;
+      }
+    }
+
     const thread = state.activeChatThread || el.chatRecipientSelect?.value || 'all';
     const to = thread;
     const selectedOpt = el.chatRecipientSelect?.selectedOptions[0];
@@ -7807,6 +8057,7 @@
       {
         sessionId: state.activeSessionId,
         text,
+        imageUrl,
         to,
         toName,
         authorName: state.isTeacher ? (state.teacherName || 'Docente') : (authorName || 'Alumno'),
@@ -7814,6 +8065,8 @@
       (ack) => {
         if (ack?.ok) {
           if (el.chatInputText) el.chatInputText.value = '';
+          clearChatPendingImage();
+          if (el.chatEmojiPicker) el.chatEmojiPicker.classList.add('hidden');
         } else {
           showToast(ack?.error || 'No se pudo enviar el mensaje', 'error');
         }

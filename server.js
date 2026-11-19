@@ -1194,13 +1194,27 @@ io.on('connection', (socket) => {
   // Register client authorId, authorName, role & optional teacher status
   socket.on('client:register', ({ authorId, authorName, teacherToken, teacherName } = {}, ack) => {
     try {
-      if (authorId && typeof authorId === 'string') {
-        socketAuthors.set(socket.id, authorId.slice(0, 80));
-        socket.data.authorId = authorId.slice(0, 80);
-      }
       const nowTeacher = isValidTeacherToken(teacherToken);
       const teacherChanged = socket.data.isTeacher !== nowTeacher;
       socket.data.isTeacher = nowTeacher;
+
+      // Assign authorId ensuring a teacher never inherits or keeps an existing student's ID
+      let finalAuthorId = socket.data.authorId || socket.id;
+      if (nowTeacher) {
+        if (authorId && typeof authorId === 'string' && (authorId.startsWith('tch_') || authorId.startsWith('teacher_'))) {
+          finalAuthorId = authorId.slice(0, 80);
+        } else {
+          finalAuthorId = 'tch_' + socket.id.slice(0, 8);
+        }
+      } else {
+        if (authorId && typeof authorId === 'string' && !authorId.startsWith('tch_') && !authorId.startsWith('teacher_')) {
+          finalAuthorId = authorId.slice(0, 80);
+        }
+      }
+
+      socketAuthors.set(socket.id, finalAuthorId);
+      socket.data.authorId = finalAuthorId;
+
       const cleanAuthorName = authorName ? String(authorName).trim().slice(0, 50) : '';
       const cleanTeacherName = teacherName ? String(teacherName).trim().slice(0, 50) : '';
       socket.data.authorName = cleanAuthorName;
@@ -1212,7 +1226,7 @@ io.on('connection', (socket) => {
 
       connectedClients.set(socket.id, {
         socketId: socket.id,
-        authorId: socket.data.authorId || socket.id,
+        authorId: finalAuthorId,
         name: displayName,
         role: nowTeacher ? 'teacher' : 'student',
         isTeacher: nowTeacher,
@@ -2213,41 +2227,45 @@ io.on('connection', (socket) => {
       const participants = store.getParticipatingStudents(session.id);
       const onlineUsers = getSessionOnlineUsers(session.id);
 
-      // Merge online status
+      // Merge online status (only matching against connected students, excluding teachers)
       const onlineMap = new Map();
-      onlineUsers.forEach((u) => {
-        onlineMap.set(u.authorId || u.name.toLowerCase(), u);
-      });
+      onlineUsers
+        .filter((u) => !u.isTeacher)
+        .forEach((u) => {
+          onlineMap.set(u.authorId || u.name.toLowerCase(), u);
+        });
 
       const students = participants.map((p) => {
         const key = p.authorId || p.name.toLowerCase();
         const onlineInfo = onlineMap.get(key) || (p.authorId ? onlineMap.get(p.authorId) : null);
         return {
           ...p,
-          isOnline: Boolean(onlineInfo),
+          isOnline: Boolean(onlineInfo && !onlineInfo.isTeacher),
           socketId: onlineInfo?.socketId || null,
         };
       });
 
-      // Add any connected online users that aren't yet in participants
-      onlineUsers.forEach((u) => {
-        const exists = students.some(
-          (s) =>
-            (s.authorId && u.authorId && s.authorId === u.authorId) ||
-            s.name.toLowerCase() === u.name.toLowerCase()
-        );
-        if (!exists) {
-          students.push({
-            authorId: u.authorId,
-            name: u.name,
-            isTeacher: Boolean(u.isTeacher),
-            postsCount: 0,
-            isDisabled: store.isAuthorDisabled(u.authorId, u.name, session.id),
-            isOnline: true,
-            socketId: u.socketId,
-          });
-        }
-      });
+      // Add any connected online users that aren't yet in participants (only students, never teachers)
+      onlineUsers
+        .filter((u) => !u.isTeacher)
+        .forEach((u) => {
+          const exists = students.some(
+            (s) =>
+              (s.authorId && u.authorId && s.authorId === u.authorId) ||
+              s.name.toLowerCase() === u.name.toLowerCase()
+          );
+          if (!exists) {
+            students.push({
+              authorId: u.authorId,
+              name: u.name,
+              isTeacher: false,
+              postsCount: 0,
+              isDisabled: store.isAuthorDisabled(u.authorId, u.name, session.id),
+              isOnline: true,
+              socketId: u.socketId,
+            });
+          }
+        });
 
       if (typeof ack === 'function') {
         ack({
@@ -2818,7 +2836,11 @@ io.on('connection', (socket) => {
       if (!sid) throw new Error('No estás conectado a ninguna sesión de clase.');
 
       const cleanText = String(payload?.text || '').trim().slice(0, 1000);
-      if (!cleanText) throw new Error('El mensaje no puede estar vacío.');
+      const imageUrl = payload?.imageUrl && typeof payload.imageUrl === 'string' && payload.imageUrl.startsWith('/uploads/')
+        ? payload.imageUrl.trim().slice(0, 200)
+        : null;
+
+      if (!cleanText && !imageUrl) throw new Error('El mensaje no puede estar vacío.');
 
       const isTeacher = Boolean(socket.data.isTeacher);
       const authorId = socket.data.authorId || socketAuthors.get(socket.id) || socket.id;
@@ -2856,6 +2878,7 @@ io.on('connection', (socket) => {
         to,
         toName,
         text: cleanText,
+        imageUrl,
         timestamp: Date.now(),
         createdAt: new Date().toISOString(),
         isPrivate,

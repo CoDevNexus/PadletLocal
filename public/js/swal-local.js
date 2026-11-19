@@ -275,6 +275,54 @@
         confirmButtonText: 'Entendido',
       });
     },
+    prompt: function (title, textOrOptions = '', customOptions = {}) {
+      return new Promise((resolve) => {
+        let opts = {};
+        if (typeof textOrOptions === 'object' && textOrOptions !== null) {
+          opts = { ...textOrOptions };
+        } else {
+          opts = { text: String(textOrOptions || ''), ...customOptions };
+        }
+        const initialVal = opts.inputValue != null ? String(opts.inputValue) : '';
+        const placeholder = opts.inputPlaceholder || 'Escribe aquí...';
+        const inputId = 'swalPromptInput_' + Math.random().toString(36).slice(2, 8);
+        const descText = opts.text
+          ? `<p style="margin:0 0 12px;font-size:0.92rem;color:#475569;line-height:1.45;">${opts.text}</p>`
+          : '';
+        const html = `
+          ${descText}
+          <div style="width:100%;text-align:left;margin-top:6px;">
+            <input type="text" id="${inputId}" class="swal-input" value="${initialVal.replace(/"/g, '&quot;')}" placeholder="${String(placeholder).replace(/"/g, '&quot;')}" maxlength="80" style="width:100%;box-sizing:border-box;padding:10px 14px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:1rem;color:#0f172a;background:#fff;outline:none;" />
+          </div>
+        `;
+
+        fire({
+          title,
+          html,
+          icon: opts.icon || 'question',
+          showCancelButton: true,
+          confirmButtonText: opts.confirmButtonText || 'Guardar',
+          cancelButtonText: opts.cancelButtonText || 'Cancelar',
+          confirmButtonColor: opts.confirmButtonColor || '#6366f1',
+          ...opts,
+        }).then((res) => {
+          if (!res || !res.isConfirmed) {
+            resolve(null);
+            return;
+          }
+          const inputEl = document.getElementById(inputId);
+          resolve(inputEl ? inputEl.value : null);
+        });
+
+        requestAnimationFrame(() => {
+          const inputEl = document.getElementById(inputId);
+          if (inputEl) {
+            inputEl.focus();
+            inputEl.select();
+          }
+        });
+      });
+    },
     success: (title, text = '') => fire({ title, text, icon: 'success' }),
     error: (title, text = '') => fire({ title, text, icon: 'error' }),
     warning: (title, text = '') => fire({ title, text, icon: 'warning' }),

@@ -297,8 +297,20 @@
           </div>
         </div>
 
+        <!-- Previsualización de imagen adjunta antes de enviar -->
+        <div id="chatImagePreviewRow" class="chat-image-preview-row hidden">
+          <div class="chat-image-preview-card">
+            <img id="chatImagePreviewThumb" src="" alt="Vista previa de imagen" />
+            <button type="button" id="btnCancelChatImage" class="btn-cancel-chat-image" title="Quitar imagen adjunta">✕</button>
+          </div>
+          <span class="chat-image-preview-name" id="chatImagePreviewName">imagen.jpg</span>
+        </div>
+
         <form id="chatForm" class="chat-input-form">
-          <input id="chatInputText" type="text" maxlength="500" placeholder="Escribe un mensaje..." autocomplete="off" required />
+          <input type="file" id="chatFileInput" accept="image/*" class="hidden" />
+          <button type="button" id="btnChatAttachImage" class="btn-chat-tool" title="Adjuntar imagen o foto">📷</button>
+          <button type="button" id="btnChatEmoji" class="btn-chat-tool" title="Insertar emojis">😀</button>
+          <input id="chatInputText" type="text" maxlength="500" placeholder="Escribe un mensaje o pega una imagen..." autocomplete="off" />
           <button type="submit" id="btnSendChat" class="btn btn-primary btn-chat-send" title="Enviar mensaje">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13" />
@@ -306,6 +318,17 @@
             </svg>
           </button>
         </form>
+
+        <!-- Selector de Emojis desplegable -->
+        <div id="chatEmojiPicker" class="chat-emoji-picker hidden">
+          <div class="chat-emoji-picker-header">
+            <span>✨ Elige un emoji</span>
+            <button type="button" id="btnCloseEmojiPicker" class="icon-btn-subtle" title="Cerrar emojis">✕</button>
+          </div>
+          <div class="chat-emoji-grid" id="chatEmojiGrid">
+            <!-- Los emojis se renderizan o están listados dinámicamente -->
+          </div>
+        </div>
       </div>
     </div>
 
