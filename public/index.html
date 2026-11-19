@@ -507,6 +507,13 @@
             <span class="action-menu-item-desc">Crear, cerrar o despublicar clases</span>
           </div>
         </button>
+        <button type="button" class="action-menu-item" id="menuItemDemoSession">
+          <span class="action-menu-item-icon">🎬</span>
+          <div class="action-menu-item-content">
+            <span class="action-menu-item-title">Modo Demo (Reels / YouTube)</span>
+            <span class="action-menu-item-desc">Crear sesión precargada para grabar videos y demos</span>
+          </div>
+        </button>
         <button type="button" class="action-menu-item" id="menuItemTeacherEditBoard">
           <span class="action-menu-item-icon">🏫</span>
           <div class="action-menu-item-content">
@@ -1318,6 +1325,55 @@
             <span class="muted-note" style="font-size:0.76rem;">Los alumnos solo ven las sesiones marcadas como Habilitadas.</span>
           </div>
           <div id="sessionsList" class="sessions-list"></div>
+        </div>
+
+        <!-- DEMO SESSION GENERATOR FOR MARKETING / REELS -->
+        <div class="demo-session-card" id="demoSessionCardSection">
+          <div class="demo-session-card-header">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="demo-session-badge">🎬 MODO DEMOSTRACIÓN</span>
+              <span class="muted-note" style="font-size:0.75rem;">Para YouTube, Reels, TikTok o presentaciones</span>
+            </div>
+            <h4 class="demo-session-title">Generar Sesión Demo Completa</h4>
+            <p class="demo-session-desc">
+              Crea al instante una sesión interactiva prellenada con publicaciones completas (post docente fijado, tarea de alumno con gráfico vectorial offline, código YOLOv8, preguntas con comentarios), chat en vivo simulado y alumnos en cola de pantalla.
+            </p>
+          </div>
+
+          <!-- State: No demo exists -->
+          <div id="demoSessionEmptyBox" class="demo-session-box">
+            <div class="demo-session-status-text">
+              <span class="demo-status-icon">💡</span>
+              <div>
+                <strong>Listo para generar demostración</strong>
+                <p class="muted-note" style="margin:2px 0 0;">Solo se permite <strong>1 sesión demo</strong> a la vez para mantener el orden. Al crearla, podrás explorarla y usarla inmediatamente para grabar tus videos o demostraciones.</p>
+              </div>
+            </div>
+            <button type="button" id="btnCreateDemoSession" class="btn btn-primary btn-demo-action">
+              🎬 Crear Sesión Demo Completa
+            </button>
+          </div>
+
+          <!-- State: Demo exists -->
+          <div id="demoSessionActiveBox" class="demo-session-box hidden">
+            <div class="demo-session-status-text is-active-demo">
+              <span class="demo-status-icon">✅</span>
+              <div>
+                <strong style="color:var(--text);">Sesión Demo Activa:</strong> <span id="demoSessionActiveName" style="color:var(--accent,#8b5cf6);font-weight:700;">Sesión Demo</span>
+                <p class="muted-note" style="margin:2px 0 0;">
+                  ⚠️ Para crear una nueva demostración, primero debes eliminar esta sesión demo.
+                </p>
+              </div>
+            </div>
+            <div class="demo-session-btns">
+              <button type="button" id="btnSwitchToDemoSession" class="btn btn-secondary btn-sm">
+                ▶ Entrar a la Sesión Demo
+              </button>
+              <button type="button" id="btnDeleteDemoSession" class="btn btn-live btn-sm">
+                🗑️ Eliminar Sesión Demo
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="danger-zone-box">
@@ -2195,59 +2251,95 @@
         <button id="btnCloseWelcomeModal" class="icon-btn hidden" data-close-modal="welcomeRoleModal" aria-label="Cerrar">✕</button>
       </div>
 
-      <div class="modal-body welcome-body">
-        <div class="welcome-cards-grid">
-          <!-- Card 1: Alumno -->
-          <div class="welcome-card welcome-card--student">
-            <div class="welcome-card-header">
-              <span class="welcome-card-icon">🎒</span>
-              <div>
-                <h3 class="welcome-card-title">Soy Alumno</h3>
-                <p class="welcome-card-desc">Participar en clase, subir notas y responder consignas</p>
+      <div class="modal-body welcome-body welcome-body--slider">
+        <!-- Segmented Role Selector -->
+        <div class="login-role-tabs-wrap">
+          <div class="login-role-tabs" role="tablist">
+            <button type="button" id="tabLoginStudent" class="login-role-tab active" role="tab" aria-selected="true">
+              <span class="login-role-tab-icon">🎒</span>
+              <span class="login-role-tab-label">Soy Alumno</span>
+            </button>
+            <button type="button" id="tabLoginTeacher" class="login-role-tab" role="tab" aria-selected="false">
+              <span class="login-role-tab-icon">🎓</span>
+              <span class="login-role-tab-label">Soy Docente</span>
+            </button>
+            <div id="loginRoleIndicator" class="login-role-indicator"></div>
+          </div>
+        </div>
+
+        <!-- Slider Viewport: Showing strictly 1 role form at a time -->
+        <div class="login-slider-container">
+          <div id="loginSliderViewport" class="login-slider-viewport">
+            <div id="loginSliderTrack" class="login-slider-track">
+              <!-- Slide 0: Alumno (SIEMPRE PRIMERO) -->
+              <div id="slideLoginStudent" class="login-slide" data-slide-index="0">
+                <div class="welcome-card welcome-card--student">
+                  <div class="welcome-card-header">
+                    <span class="welcome-card-icon">🎒</span>
+                    <div>
+                      <h3 class="welcome-card-title">Acceso de Alumno</h3>
+                      <p class="welcome-card-desc">Participar en clase, subir notas, responder consignas y chatear</p>
+                    </div>
+                  </div>
+                  <form id="welcomeStudentForm" class="welcome-card-form">
+                    <div class="form-group">
+                      <label for="welcomeStudentName">Tu Nombre o Apodo <span class="req">*</span></label>
+                      <input id="welcomeStudentName" type="text" maxlength="35" placeholder="Ej. Camila Morales" required />
+                    </div>
+                    <div class="form-group">
+                      <label for="welcomeStudentSessionSelect">Sesión / Clase disponible</label>
+                      <select id="welcomeStudentSessionSelect" class="select-input">
+                        <option value="">Cargando clases disponibles...</option>
+                      </select>
+                    </div>
+                    <button type="submit" id="btnEnterAsStudent" class="btn btn-primary btn-welcome-enter">
+                      🎒 Ingresar como Alumno
+                    </button>
+                  </form>
+                  <div class="login-slide-nav-hint">
+                    <span>¿Eres docente?</span>
+                    <button type="button" id="btnGoToTeacherLogin" class="btn-text-link">Desliza o ingresa aquí 👉</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slide 1: Docente (Multi-Profesor) -->
+              <div id="slideLoginTeacher" class="login-slide" data-slide-index="1">
+                <div class="welcome-card welcome-card--teacher">
+                  <div class="welcome-card-header">
+                    <span class="welcome-card-icon">🎓</span>
+                    <div>
+                      <h3 class="welcome-card-title">Acceso de Docente</h3>
+                      <p class="welcome-card-desc">Administrar tareas, tests, recesos, sesiones y alumnos</p>
+                    </div>
+                  </div>
+                  <form id="welcomeTeacherForm" class="welcome-card-form">
+                    <div class="form-group">
+                      <label for="welcomeTeacherName">Nombre del Docente <span class="req">*</span></label>
+                      <input id="welcomeTeacherName" type="text" maxlength="50" placeholder="Ej. Prof. Carlos Méndez" required />
+                    </div>
+                    <div class="form-group">
+                      <label for="welcomeTeacherPin">PIN de Acceso Docente <span class="req">*</span></label>
+                      <input id="welcomeTeacherPin" type="password" inputmode="numeric" maxlength="20" placeholder="Ingresa el PIN de profesor" required />
+                      <small class="field-hint" style="color:var(--text-muted);font-size:0.75rem;margin-top:2px;display:block;">PIN predeterminado: <strong>1234</strong> (configurable en el panel).</small>
+                    </div>
+                    <div id="welcomeTeacherError" class="form-error hidden"></div>
+                    <button type="submit" id="btnEnterAsTeacher" class="btn btn-indigo btn-welcome-enter">
+                      🎓 Ingresar como Docente
+                    </button>
+                  </form>
+                  <div class="login-slide-nav-hint">
+                    <span>¿Eres alumno?</span>
+                    <button type="button" id="btnGoToStudentLogin" class="btn-text-link">👈 Desliza o regresa aquí</button>
+                  </div>
+                </div>
               </div>
             </div>
-            <form id="welcomeStudentForm" class="welcome-card-form">
-              <div class="form-group">
-                <label for="welcomeStudentName">Tu Nombre o Apodo <span class="req">*</span></label>
-                <input id="welcomeStudentName" type="text" maxlength="35" placeholder="Ej. Camila Morales" required />
-              </div>
-              <div class="form-group">
-                <label for="welcomeStudentSessionSelect">Sesión / Clase disponible</label>
-                <select id="welcomeStudentSessionSelect" class="select-input">
-                  <option value="">Cargando clases disponibles...</option>
-                </select>
-              </div>
-              <button type="submit" id="btnEnterAsStudent" class="btn btn-primary btn-welcome-enter">
-                🎒 Ingresar como Alumno
-              </button>
-            </form>
           </div>
 
-          <!-- Card 2: Docente (Multi-Profesor) -->
-          <div class="welcome-card welcome-card--teacher">
-            <div class="welcome-card-header">
-              <span class="welcome-card-icon">🎓</span>
-              <div>
-                <h3 class="welcome-card-title">Soy Docente</h3>
-                <p class="welcome-card-desc">Administrar tareas, tests, recesos, sesiones y alumnos</p>
-              </div>
-            </div>
-            <form id="welcomeTeacherForm" class="welcome-card-form">
-              <div class="form-group">
-                <label for="welcomeTeacherName">Nombre del Docente <span class="req">*</span></label>
-                <input id="welcomeTeacherName" type="text" maxlength="50" placeholder="Ej. Prof. Carlos Méndez" required />
-              </div>
-              <div class="form-group">
-                <label for="welcomeTeacherPin">PIN de Acceso Docente <span class="req">*</span></label>
-                <input id="welcomeTeacherPin" type="password" inputmode="numeric" maxlength="20" placeholder="Ingresa el PIN de profesor" required />
-                <small class="field-hint" style="color:var(--text-muted);font-size:0.75rem;margin-top:2px;display:block;">PIN predeterminado: <strong>1234</strong> (configurable en el panel).</small>
-              </div>
-              <div id="welcomeTeacherError" class="form-error hidden"></div>
-              <button type="submit" id="btnEnterAsTeacher" class="btn btn-indigo btn-welcome-enter">
-                🎓 Ingresar como Docente
-              </button>
-            </form>
-          </div>
+          <!-- Navigation slide buttons for quick click / desktop -->
+          <button type="button" id="btnLoginSlidePrev" class="login-slide-arrow login-slide-arrow--prev hidden" aria-label="Ir a Alumno" title="Ir a Alumno">‹</button>
+          <button type="button" id="btnLoginSlideNext" class="login-slide-arrow login-slide-arrow--next" aria-label="Ir a Docente" title="Ir a Docente">›</button>
         </div>
       </div>
 

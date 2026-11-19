@@ -20,6 +20,7 @@ function createBlankSession({
   isClosed = false,
   hideFromStudents = false,
   teacherName = null,
+  isDemo = false,
   id,
 } = {}) {
   const cleanName = String(name || 'Sesión Principal').trim().slice(0, 80) || 'Sesión Principal';
@@ -28,6 +29,7 @@ function createBlankSession({
     id: id || crypto.randomUUID(),
     name: cleanName,
     createdAt: new Date().toISOString(),
+    isDemo: Boolean(isDemo),
     isPublished: Boolean(isPublished),
     isClosed: Boolean(isClosed),
     hideFromStudents: Boolean(hideFromStudents),
@@ -63,6 +65,7 @@ function normalizeSession(raw) {
     isPublished: raw?.isPublished !== false,
     isClosed: Boolean(raw?.isClosed),
     hideFromStudents: Boolean(raw?.hideFromStudents),
+    isDemo: Boolean(raw?.isDemo),
     teacherName: raw?.teacherName ? String(raw.teacherName).slice(0, 60) : null,
     board: {
       title: raw?.board?.title || fallbackName,
@@ -305,6 +308,7 @@ class BoardStore {
       return {
         id: s.id,
         name: s.name,
+        isDemo: Boolean(s.isDemo),
         description: s.board?.description || '',
         createdAt: s.createdAt,
         isPublished: s.isPublished !== false,
@@ -340,6 +344,350 @@ class BoardStore {
     }
     this.save();
     return session;
+  }
+
+  hasDemoSession() {
+    return this.data.sessions.some((s) => Boolean(s.isDemo));
+  }
+
+  getDemoSession() {
+    return this.data.sessions.find((s) => Boolean(s.isDemo)) || null;
+  }
+
+  createDemoSession({ teacherName } = {}) {
+    if (this.hasDemoSession()) {
+      const existing = this.getDemoSession();
+      throw new Error(
+        `Ya existe una sesión demo activa ("${existing?.name || 'Sesión Demo'}"). Para crear una nueva, primero debes eliminar la sesión demo existente.`
+      );
+    }
+
+    const sessionId = crypto.randomUUID();
+    const cleanTeacher = teacherName ? String(teacherName).slice(0, 60) : 'Prof. Carlos Méndez';
+    const now = Date.now();
+
+    const demoLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" width="280" height="64"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2563eb"/><stop offset="100%" stop-color="#7c3aed"/></linearGradient></defs><rect x="2" y="6" width="52" height="52" rx="12" fill="url(#lg)"/><path d="M 28 17 L 38 32 L 18 32 Z" fill="#ffffff" opacity="0.95"/><circle cx="28" cy="38" r="4" fill="#60a5fa"/><path d="M 28 22 L 28 36" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/><text x="66" y="32" fill="#1e293b" font-family="system-ui,-apple-system,sans-serif" font-size="17" font-weight="800" letter-spacing="-0.02em">TECHLAB</text><text x="66" y="47" fill="#6366f1" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" font-weight="700" letter-spacing="0.12em">AI &amp; ROBOTICS ACADEMY</text></svg>`;
+    const demoLogoUrl = `data:image/svg+xml;utf8,${encodeURIComponent(demoLogoSvg)}`;
+
+    const demoChartSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 420" width="760" height="420" style="background:#090d16;font-family:system-ui,-apple-system,sans-serif;"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#8b5cf6"/></linearGradient><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/><stop offset="100%" stop-color="#10b981" stop-opacity="0"/></linearGradient></defs><rect width="100%" height="100%" fill="#090d16" rx="14"/><rect x="20" y="20" width="720" height="380" fill="#111827" stroke="#1f293d" rx="12"/><text x="45" y="56" fill="#f8fafc" font-size="17" font-weight="bold">Pipeline de Entrenamiento · Modelo ResNet18 (25 Épocas)</text><text x="45" y="78" fill="#94a3b8" font-size="12">Validación Final: Accuracy = 96.42% · Loss = 0.114 · GPU Acceleration (Metal/CUDA)</text><path d="M 50 340 L 120 280 L 190 230 L 260 170 L 330 140 L 400 120 L 470 108 L 540 98 L 610 94 L 680 90" fill="none" stroke="#10b981" stroke-width="4" stroke-linecap="round"/><path d="M 50 340 L 120 280 L 190 230 L 260 170 L 330 140 L 400 120 L 470 108 L 540 98 L 610 94 L 680 90 L 680 340 L 50 340 Z" fill="url(#g2)"/><g transform="translate(480, 160)"><rect width="210" height="150" fill="#1e293b" stroke="#334155" rx="8"/><text x="15" y="26" fill="#cbd5e1" font-size="11" font-weight="bold">Matriz de Confusión (Top 3 Clases)</text><rect x="20" y="40" width="45" height="30" fill="#2563eb" rx="4"/><text x="42" y="60" fill="#fff" font-size="12" font-weight="bold" text-anchor="middle">98%</text><rect x="70" y="40" width="45" height="30" fill="#1e3a8a" rx="4"/><text x="92" y="60" fill="#93c5fd" font-size="11" text-anchor="middle">2%</text><rect x="120" y="40" width="45" height="30" fill="#0f172a" rx="4"/><text x="142" y="60" fill="#64748b" font-size="11" text-anchor="middle">0%</text><rect x="20" y="75" width="45" height="30" fill="#1e3a8a" rx="4"/><text x="42" y="95" fill="#93c5fd" font-size="11" text-anchor="middle">3%</text><rect x="70" y="75" width="45" height="30" fill="#2563eb" rx="4"/><text x="92" y="95" fill="#fff" font-size="12" font-weight="bold" text-anchor="middle">96%</text><rect x="120" y="75" width="45" height="30" fill="#1e3a8a" rx="4"/><text x="142" y="95" fill="#93c5fd" font-size="11" text-anchor="middle">1%</text><rect x="20" y="110" width="45" height="30" fill="#0f172a" rx="4"/><text x="42" y="130" fill="#64748b" font-size="11" text-anchor="middle">1%</text><rect x="70" y="110" width="45" height="30" fill="#1e3a8a" rx="4"/><text x="92" y="130" fill="#93c5fd" font-size="11" text-anchor="middle">4%</text><rect x="120" y="110" width="45" height="30" fill="#2563eb" rx="4"/><text x="142" y="130" fill="#fff" font-size="12" font-weight="bold" text-anchor="middle">95%</text></g><circle cx="680" cy="90" r="6" fill="#10b981" stroke="#fff" stroke-width="2"/><text x="645" y="75" fill="#34d399" font-size="13" font-weight="bold">96.4%</text></svg>`;
+    const demoChartUrl = `data:image/svg+xml;utf8,${encodeURIComponent(demoChartSvg)}`;
+
+    const assignmentId = crypto.randomUUID();
+    const demoAssignment = {
+      id: assignmentId,
+      title: 'Entrega Final: Pipeline de Visión por Computadora',
+      description: 'Subir arquitectura de la red convolucional, matriz de confusión y conclusiones sobre el rendimiento del modelo.',
+      createdAt: new Date(now - 7200000).toISOString(),
+      dueDate: new Date(now + 5400000).toISOString(),
+      authorName: cleanTeacher,
+      requiresFile: false,
+    };
+
+    const demoPosts = [
+      {
+        id: crypto.randomUUID(),
+        author: cleanTeacher,
+        authorId: 'tch_master',
+        authorRole: 'teacher',
+        authorIsTeacher: true,
+        pinned: true,
+        highlighted: true,
+        topic: '🚀 Consigna del Día: Redes Neuronales & Visión por Computadora',
+        content: '¡Bienvenidos al laboratorio de hoy!\\n\\nEstaremos entrenando modelos de clasificación en tiempo real usando PyTorch y OpenCV.\\n\\n📌 Objetivos:\\n1. Ajustar hiperparámetros para superar el 95% de precisión.\\n2. Compartir capturas de sus matrices de confusión.\\n3. Encolar su pantalla si necesitan revisión en el proyector principal.',
+        createdAt: new Date(now - 7100000).toISOString(),
+        likes: ['std_camila', 'std_mateo', 'std_sofia', 'std_alejandro'],
+        comments: [
+          { id: crypto.randomUUID(), author: 'Camila Morales', text: '¡Entendido profesor! Ya cargué el dataset con aumentación de datos.', createdAt: new Date(now - 6000000).toISOString() },
+          { id: crypto.randomUUID(), author: 'Mateo Rossi', text: '¿Recomienda usar AdamW con weight decay 0.01?', createdAt: new Date(now - 5200000).toISOString() },
+          { id: crypto.randomUUID(), author: cleanTeacher, text: 'Excelente elección Mateo, ayuda a generalizar mejor.', createdAt: new Date(now - 4800000).toISOString() }
+        ],
+        order: 0,
+      },
+      {
+        id: crypto.randomUUID(),
+        author: 'Camila Morales',
+        authorId: 'std_camila',
+        authorRole: 'student',
+        authorIsTeacher: false,
+        assignmentId,
+        assignmentTitle: demoAssignment.title,
+        topic: '📊 Matriz de Confusión y Accuracy (96.4%)',
+        content: 'Modelo entrenado exitosamente con 25 épocas. Se obtuvo una precisión del 96.4% en test con una función de pérdida CrossEntropyLoss inferior a 0.12. ¡Adjunto el gráfico de resultados!',
+        imageUrl: demoChartUrl,
+        reviewed: true,
+        reviewedBy: cleanTeacher,
+        reviewedAt: new Date(now - 3200000).toISOString(),
+        createdAt: new Date(now - 4500000).toISOString(),
+        likes: ['std_mateo', 'std_sofia'],
+        comments: [
+          { id: crypto.randomUUID(), author: cleanTeacher, text: '¡Trabajo impecable Camila! Revisado y aprobado para la presentación final.', createdAt: new Date(now - 3100000).toISOString() }
+        ],
+        order: 1,
+      },
+      {
+        id: crypto.randomUUID(),
+        author: 'Mateo Rossi',
+        authorId: 'std_mateo',
+        authorRole: 'student',
+        authorIsTeacher: false,
+        kind: 'screen',
+        topic: '🖥️ Demostración en Vivo: Inferencia YOLOv8 en Tiempo Real',
+        content: 'Demostración de detección de objetos a 60 FPS ejecutándose en hardware local sin internet. Lista para proyectar en ventana flotante.',
+        createdAt: new Date(now - 3600000).toISOString(),
+        screenShare: {
+          active: false,
+          sharerName: 'Mateo Rossi',
+          audience: 'all',
+          viewerCount: 6,
+          pausedByTeacher: false,
+        },
+        likes: ['std_camila', 'std_alejandro'],
+        comments: [],
+        order: 2,
+      },
+      {
+        id: crypto.randomUUID(),
+        author: 'Sofía Albarracín',
+        authorId: 'std_sofia',
+        authorRole: 'student',
+        authorIsTeacher: false,
+        highlighted: true,
+        topic: '🤖 Duda Técnica: Normalización de Tensores en PyTorch',
+        content: '¿Es recomendable aplicar BatchNorm2d antes o después de la función de activación ReLU? En las pruebas preliminares observo mejor gradiente colocándolo antes.',
+        createdAt: new Date(now - 2800000).toISOString(),
+        likes: ['std_mateo'],
+        comments: [
+          { id: crypto.randomUUID(), author: cleanTeacher, text: 'Por estándar se coloca antes de ReLU para normalizar la entrada a la no-linealidad.', createdAt: new Date(now - 2400000).toISOString() }
+        ],
+        order: 3,
+      },
+      {
+        id: crypto.randomUUID(),
+        author: 'Alejandro Silva',
+        authorId: 'std_alejandro',
+        authorRole: 'student',
+        authorIsTeacher: false,
+        topic: '🎮 Control por Gestos con Cámara Web (MediaPipe)',
+        content: 'Implementé navegación por gestos en JavaScript puro para controlar las diapositivas con la mano. ¡100% offline y corre en cualquier navegador!',
+        createdAt: new Date(now - 1900000).toISOString(),
+        likes: ['std_camila', 'std_sofia', 'std_mateo'],
+        comments: [],
+        order: 4,
+      },
+    ];
+
+    const demoChat = [
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'std_mateo',
+        authorId: 'std_mateo',
+        fromName: 'Mateo Rossi',
+        authorName: 'Mateo Rossi',
+        fromRole: 'student',
+        isTeacher: false,
+        to: 'all',
+        toName: 'Todos',
+        text: '¡Hola a todos! Conectado desde la laptop 04 del laboratorio 👋',
+        isPrivate: false,
+        timestamp: now - 3600000,
+        createdAt: new Date(now - 3600000).toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'std_camila',
+        authorId: 'std_camila',
+        fromName: 'Camila Morales',
+        authorName: 'Camila Morales',
+        fromRole: 'student',
+        isTeacher: false,
+        to: 'all',
+        toName: 'Todos',
+        text: 'Hola Mateo, ¿descargaste el dataset de imágenes?',
+        isPrivate: false,
+        timestamp: now - 3400000,
+        createdAt: new Date(now - 3400000).toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'std_mateo',
+        authorId: 'std_mateo',
+        fromName: 'Mateo Rossi',
+        authorName: 'Mateo Rossi',
+        fromRole: 'student',
+        isTeacher: false,
+        to: 'all',
+        toName: 'Todos',
+        text: 'Sí, va súper rápido en la red local. Ya lo descomprimí.',
+        isPrivate: false,
+        timestamp: now - 3200000,
+        createdAt: new Date(now - 3200000).toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'std_alejandro',
+        authorId: 'std_alejandro',
+        fromName: 'Alejandro Silva',
+        authorName: 'Alejandro Silva',
+        fromRole: 'student',
+        isTeacher: false,
+        to: 'all',
+        toName: 'Todos',
+        text: 'Profesor, ¿podemos compartir pantalla para mostrar la prueba de cámara?',
+        isPrivate: false,
+        timestamp: now - 2800000,
+        createdAt: new Date(now - 2800000).toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'tch_master',
+        authorId: 'tch_master',
+        fromName: cleanTeacher,
+        authorName: cleanTeacher,
+        fromRole: 'teacher',
+        isTeacher: true,
+        to: 'all',
+        toName: 'Todos',
+        text: '¡Por supuesto Alejandro! Presiona "Compartir Pantalla" para encolar tu turno y te proyecto en la pantalla principal 🖥️',
+        isPrivate: false,
+        timestamp: now - 2600000,
+        createdAt: new Date(now - 2600000).toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'std_sofia',
+        authorId: 'std_sofia',
+        fromName: 'Sofía Albarracín',
+        authorName: 'Sofía Albarracín',
+        fromRole: 'student',
+        isTeacher: false,
+        to: 'all',
+        toName: 'Todos',
+        text: '¡Listo! Ya publiqué mi consulta sobre BatchNorm con un ejemplo de código.',
+        isPrivate: false,
+        timestamp: now - 2200000,
+        createdAt: new Date(now - 2200000).toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'std_camila',
+        authorId: 'std_camila',
+        fromName: 'Camila Morales',
+        authorName: 'Camila Morales',
+        fromRole: 'student',
+        isTeacher: false,
+        to: 'all',
+        toName: 'Todos',
+        text: 'Te respondí en tu post Sofía, a mí me funcionó colocándolo antes 👍',
+        isPrivate: false,
+        timestamp: now - 1800000,
+        createdAt: new Date(now - 1800000).toISOString(),
+      },
+      {
+        id: crypto.randomUUID(),
+        sessionId,
+        fromId: 'tch_master',
+        authorId: 'tch_master',
+        fromName: cleanTeacher,
+        authorName: cleanTeacher,
+        fromRole: 'teacher',
+        isTeacher: true,
+        to: 'all',
+        toName: 'Todos',
+        text: 'Excelente colaboración grupo. En 5 minutos abrimos la sesión de preguntas en vivo ⏱️',
+        isPrivate: false,
+        timestamp: now - 1200000,
+        createdAt: new Date(now - 1200000).toISOString(),
+      },
+    ];
+
+    const demoQuizzes = [
+      {
+        id: crypto.randomUUID(),
+        title: 'Quiz Rápido: Fundamentos de Visión por Computadora',
+        description: '2 preguntas clave para evaluar conceptos de convolución y optimización',
+        createdAt: new Date(now - 7000000).toISOString(),
+        timeLimitSeconds: 180,
+        questions: [
+          {
+            id: 'q1',
+            text: '¿Cuál es el propósito principal de una capa MaxPooling en una CNN?',
+            options: [
+              'Aumentar la dimensionalidad de las imágenes',
+              'Reducir la dimensionalidad espacial y controlar el sobreajuste',
+              'Normalizar los pesos de los tensores',
+              'Reemplazar la función de activación'
+            ],
+            correctOptionIndex: 1
+          },
+          {
+            id: 'q2',
+            text: '¿Qué optimizador ajusta la tasa de aprendizaje adaptativa individualmente por parámetro?',
+            options: [
+              'SGD estándar',
+              'Adam / AdamW',
+              'Batch Gradient Descent',
+              'Perceptrón Simple'
+            ],
+            correctOptionIndex: 1
+          }
+        ]
+      }
+    ];
+
+    const session = {
+      id: sessionId,
+      name: '🎬 Sesión Demo · Academia IA 2026',
+      createdAt: new Date(now - 7200000).toISOString(),
+      isDemo: true,
+      isPublished: true,
+      isClosed: false,
+      hideFromStudents: false,
+      teacherName: cleanTeacher,
+      board: {
+        title: '🎬 Sesión Demo · Academia IA 2026',
+        eventName: 'Taller Interactivo de Inteligencia Artificial & Robótica',
+        institutionName: '🏫 Academia de Innovación & TechLab',
+        institutionLogo: demoLogoUrl,
+        institutionLogoShape: 'wide',
+        institutionLogoSize: 'normal',
+        description: 'Sesión interactiva en red local. Publica tus proyectos, haz preguntas al docente y comparte tu pantalla en tiempo real.',
+      },
+      posts: demoPosts,
+      assignment: demoAssignment,
+      assignmentHistory: [],
+      notifications: [
+        {
+          id: crypto.randomUUID(),
+          title: '🎬 Sesión de Demostración Activada',
+          message: 'Esta sesión incluye posts, consignas, chat y colas de pantalla para grabar videos y probar la plataforma.',
+          createdAt: new Date(now - 7100000).toISOString(),
+        }
+      ],
+      timer: null,
+      scheduledTimers: [],
+      quizzes: demoQuizzes,
+      activeQuiz: null,
+      chatMessages: demoChat,
+      disabledAuthors: [],
+    };
+
+    this.data.sessions.unshift(session);
+    this.data.activeSessionId = session.id;
+    this.save();
+    return session;
+  }
+
+  deleteDemoSession() {
+    const demo = this.getDemoSession();
+    if (!demo) throw new Error('No existe ninguna sesión demo activa para eliminar.');
+    return this.deleteSession(demo.id);
   }
 
   switchSession(sessionId) {

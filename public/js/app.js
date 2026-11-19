@@ -435,6 +435,7 @@
     menuItemTeacherNotify: document.getElementById('menuItemTeacherNotify'),
     menuItemTeacherTimers: document.getElementById('menuItemTeacherTimers'),
     menuItemTeacherSessions: document.getElementById('menuItemTeacherSessions'),
+    menuItemDemoSession: document.getElementById('menuItemDemoSession'),
     menuItemTeacherScreens: document.getElementById('menuItemTeacherScreens'),
     menuItemTeacherPost: document.getElementById('menuItemTeacherPost'),
     menuItemTeacherCleanBoard: document.getElementById('menuItemTeacherCleanBoard'),
@@ -510,6 +511,15 @@
     // Modal: Welcome & Role Selection
     welcomeRoleModal: document.getElementById('welcomeRoleModal'),
     btnCloseWelcomeModal: document.getElementById('btnCloseWelcomeModal'),
+    tabLoginStudent: document.getElementById('tabLoginStudent'),
+    tabLoginTeacher: document.getElementById('tabLoginTeacher'),
+    loginRoleIndicator: document.getElementById('loginRoleIndicator'),
+    loginSliderViewport: document.getElementById('loginSliderViewport'),
+    loginSliderTrack: document.getElementById('loginSliderTrack'),
+    btnLoginSlidePrev: document.getElementById('btnLoginSlidePrev'),
+    btnLoginSlideNext: document.getElementById('btnLoginSlideNext'),
+    btnGoToTeacherLogin: document.getElementById('btnGoToTeacherLogin'),
+    btnGoToStudentLogin: document.getElementById('btnGoToStudentLogin'),
     welcomeStudentForm: document.getElementById('welcomeStudentForm'),
     welcomeStudentName: document.getElementById('welcomeStudentName'),
     welcomeStudentSessionSelect: document.getElementById('welcomeStudentSessionSelect'),
@@ -520,6 +530,15 @@
     welcomeTeacherError: document.getElementById('welcomeTeacherError'),
     btnEnterAsTeacher: document.getElementById('btnEnterAsTeacher'),
     btnWelcomeAboutDev: document.getElementById('btnWelcomeAboutDev'),
+
+    // Demo Session Card in Teacher Panel
+    demoSessionCardSection: document.getElementById('demoSessionCardSection'),
+    demoSessionEmptyBox: document.getElementById('demoSessionEmptyBox'),
+    demoSessionActiveBox: document.getElementById('demoSessionActiveBox'),
+    demoSessionActiveName: document.getElementById('demoSessionActiveName'),
+    btnCreateDemoSession: document.getElementById('btnCreateDemoSession'),
+    btnDeleteDemoSession: document.getElementById('btnDeleteDemoSession'),
+    btnSwitchToDemoSession: document.getElementById('btnSwitchToDemoSession'),
 
     btnNetworkInfo: document.getElementById('btnNetworkInfo'),
     btnOpenScreenModal: document.getElementById('btnOpenScreenModal'),
@@ -1108,6 +1127,7 @@
 
     renderSessionStatusBanner();
     renderSessionsUI();
+    updateDemoSessionUI();
     renderSessionPickerList();
     renderScheduledTimersUI();
     renderScreenQueue();
@@ -1268,6 +1288,7 @@
     renderAssignmentHistory();
     renderScheduledTimersUI();
     renderSessionsUI();
+    updateDemoSessionUI();
     setDefaultScheduleTime();
     switchTeacherTab(tab);
     openModal(el.teacherPanelModal);
@@ -1508,6 +1529,20 @@
   el.menuItemTeacherSessions?.addEventListener('click', () => {
     closeActionMenus();
     openTeacherPanel('sessions');
+  });
+
+  el.menuItemDemoSession?.addEventListener('click', () => {
+    closeActionMenus();
+    openTeacherPanel('sessions');
+    setTimeout(() => {
+      const card = el.demoSessionCardSection || document.getElementById('demoSessionCardSection');
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.style.transition = 'box-shadow 0.3s ease';
+        card.style.boxShadow = '0 0 0 3px var(--accent, #8b5cf6)';
+        setTimeout(() => { card.style.boxShadow = ''; }, 1800);
+      }
+    }, 200);
   });
 
   el.menuItemTeacherStudents?.addEventListener('click', () => {
@@ -3439,6 +3474,7 @@
             <div class="session-item-info">
               <div class="session-item-title-row">
                 <strong>${escapeHtml(s.name)}</strong>
+                ${s.isDemo ? '<span class="session-tag-demo">🎬 DEMO</span>' : ''}
                 ${isCurrent ? '<span class="session-active-tag">Actual</span>' : ''}
                 ${isPub ? '<span class="session-tag-pub">Habilitada</span>' : '<span class="session-tag-unpub">Despublicada</span>'}
                 ${isClosed ? '<span class="session-tag-closed">Cerrada</span>' : ''}
@@ -3474,6 +3510,7 @@
         `;
       })
       .join('');
+    updateDemoSessionUI();
   }
 
   el.activeSessionBadge.addEventListener('click', () => {
@@ -3642,6 +3679,85 @@
       else {
         closeModal(el.teacherPanelModal);
         showToast('🔄 Sesión reiniciada desde cero', 'success');
+      }
+    });
+  });
+
+  // --- Demo Session Management (Reels / YouTube) ---
+  function updateDemoSessionUI() {
+    const hasDemo = state.hasDemoSession || (state.sessions || []).some((s) => Boolean(s.isDemo));
+    const demoSession = (state.sessions || []).find((s) => Boolean(s.isDemo));
+
+    if (el.demoSessionEmptyBox && el.demoSessionActiveBox) {
+      if (hasDemo && demoSession) {
+        el.demoSessionEmptyBox.classList.add('hidden');
+        el.demoSessionActiveBox.classList.remove('hidden');
+        if (el.demoSessionActiveName) {
+          el.demoSessionActiveName.textContent = `"${demoSession.name}"`;
+        }
+        if (el.btnSwitchToDemoSession) {
+          const isAlreadyInDemo = state.activeSessionId === demoSession.id;
+          el.btnSwitchToDemoSession.disabled = isAlreadyInDemo;
+          el.btnSwitchToDemoSession.textContent = isAlreadyInDemo ? '✅ En esta sesión' : '▶ Entrar a la Sesión Demo';
+        }
+      } else {
+        el.demoSessionEmptyBox.classList.remove('hidden');
+        el.demoSessionActiveBox.classList.add('hidden');
+      }
+    }
+  }
+
+  el.btnCreateDemoSession?.addEventListener('click', () => {
+    if (state.hasDemoSession || (state.sessions || []).some((s) => Boolean(s.isDemo))) {
+      showToast('Ya existe una sesión demo activa. Debes eliminarla primero para crear otra.', 'warning');
+      return;
+    }
+    if (el.btnCreateDemoSession) el.btnCreateDemoSession.disabled = true;
+    socket.emit(
+      'teacher:session:create-demo',
+      {
+        teacherToken: state.teacherToken,
+        teacherName: state.teacherName || 'Prof. Carlos Méndez',
+      },
+      (ack) => {
+        if (el.btnCreateDemoSession) el.btnCreateDemoSession.disabled = false;
+        if (!ack?.ok) {
+          showToast(ack?.error || 'No se pudo generar la sesión demo', 'error');
+          return;
+        }
+        state.hasChosenSession = true;
+        closeModal(el.teacherPanelModal);
+        showToast('🎬 ¡Sesión Demo creada exitosamente! Lista para grabar videos o exponer.', 'success');
+      }
+    );
+  });
+
+  el.btnDeleteDemoSession?.addEventListener('click', async () => {
+    const ok = await Swal.confirm(
+      '¿Eliminar sesión demo?',
+      '¿Deseas eliminar permanentemente la sesión demo y todos sus datos de prueba? Podrás generar una nueva sesión demo cuando quieras.',
+      { icon: 'warning', confirmButtonText: 'Sí, eliminar demo', confirmButtonColor: '#ef4444' }
+    );
+    if (!ok) return;
+
+    socket.emit('teacher:session:delete-demo', { teacherToken: state.teacherToken }, (ack) => {
+      if (!ack?.ok) {
+        showToast(ack?.error || 'No se pudo eliminar la sesión demo', 'error');
+        return;
+      }
+      showToast('🎬 Sesión demo eliminada. Ya puedes generar una nueva cuando lo requieras.', 'info');
+    });
+  });
+
+  el.btnSwitchToDemoSession?.addEventListener('click', () => {
+    const demoSession = (state.sessions || []).find((s) => Boolean(s.isDemo));
+    if (!demoSession) return;
+    state.hasChosenSession = true;
+    socket.emit('teacher:session:switch', { teacherToken: state.teacherToken, sessionId: demoSession.id }, (ack) => {
+      if (!ack?.ok) showToast(ack?.error || 'No se pudo cambiar a la sesión demo', 'error');
+      else {
+        closeModal(el.teacherPanelModal);
+        showToast(`🎬 Entraste a "${demoSession.name}"`, 'success');
       }
     });
   });
@@ -3867,6 +3983,9 @@
       updateTopbarClockAndSessionTimer();
     }
     state.sessionStatus = data.sessionStatus || { isPublished: true, isClosed: false };
+    state.isDemo = Boolean(data.isDemo);
+    state.hasDemoSession = Boolean(data.hasDemoSession);
+    state.demoSessionId = data.demoSessionId || null;
     if (Array.isArray(data.sessions)) {
       state.sessions = data.sessions;
     }
@@ -3884,6 +4003,7 @@
     renderBoardMeta();
     renderSessionStatusBanner();
     renderSessionsUI();
+    updateDemoSessionUI();
     renderSessionPickerList();
     renderAssignmentBanner();
     renderAssignmentHistory();
@@ -3953,6 +4073,7 @@
     state.screenQueue = [];
     renderSessionStatusBanner();
     renderSessionsUI();
+    updateDemoSessionUI();
     renderAssignmentBanner();
     renderTimerTick();
     renderScreenQueue();
@@ -3971,6 +4092,7 @@
     }
     renderSessionStatusBanner();
     renderSessionsUI();
+    updateDemoSessionUI();
     renderSessionPickerList();
     updateWelcomeSessionsDropdown();
   });
@@ -7656,8 +7778,83 @@
   }, 60000);
 
   // =====================================================================
-  // WELCOME & ROLE SELECTION (Multi-Profesor & Alumnos)
+  // WELCOME & ROLE SELECTION (Multi-Profesor & Alumnos con Slider Horizontal)
   // =====================================================================
+  let currentLoginSlide = 0;
+
+  function setLoginSlide(index) {
+    currentLoginSlide = index === 1 ? 1 : 0;
+    if (el.loginSliderTrack) {
+      el.loginSliderTrack.style.transform = currentLoginSlide === 1 ? 'translateX(-100%)' : 'translateX(0%)';
+    }
+    if (el.tabLoginStudent && el.tabLoginTeacher) {
+      el.tabLoginStudent.classList.toggle('active', currentLoginSlide === 0);
+      el.tabLoginTeacher.classList.toggle('active', currentLoginSlide === 1);
+      el.tabLoginStudent.setAttribute('aria-selected', String(currentLoginSlide === 0));
+      el.tabLoginTeacher.setAttribute('aria-selected', String(currentLoginSlide === 1));
+    }
+    if (el.loginRoleIndicator) {
+      el.loginRoleIndicator.classList.toggle('is-teacher', currentLoginSlide === 1);
+    }
+    if (el.btnLoginSlidePrev) {
+      el.btnLoginSlidePrev.classList.toggle('hidden', currentLoginSlide === 0);
+    }
+    if (el.btnLoginSlideNext) {
+      el.btnLoginSlideNext.classList.toggle('hidden', currentLoginSlide === 1);
+    }
+
+    if (currentLoginSlide === 0) {
+      setTimeout(() => el.welcomeStudentName?.focus(), 120);
+    } else {
+      setTimeout(() => {
+        if (el.welcomeTeacherName && !el.welcomeTeacherName.value) {
+          el.welcomeTeacherName.focus();
+        } else {
+          el.welcomeTeacherPin?.focus();
+        }
+      }, 120);
+    }
+  }
+
+  el.tabLoginStudent?.addEventListener('click', () => setLoginSlide(0));
+  el.tabLoginTeacher?.addEventListener('click', () => setLoginSlide(1));
+  el.btnGoToTeacherLogin?.addEventListener('click', () => setLoginSlide(1));
+  el.btnGoToStudentLogin?.addEventListener('click', () => setLoginSlide(0));
+  el.btnLoginSlidePrev?.addEventListener('click', () => setLoginSlide(0));
+  el.btnLoginSlideNext?.addEventListener('click', () => setLoginSlide(1));
+
+  // Deslizamiento táctil para móviles y pantallas táctiles
+  let touchStartX = 0;
+  let touchStartY = 0;
+  if (el.loginSliderViewport) {
+    el.loginSliderViewport.addEventListener(
+      'touchstart',
+      (e) => {
+        if (!e.touches || !e.touches[0]) return;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      },
+      { passive: true }
+    );
+
+    el.loginSliderViewport.addEventListener(
+      'touchend',
+      (e) => {
+        if (!e.changedTouches || !e.changedTouches[0]) return;
+        const diffX = e.changedTouches[0].clientX - touchStartX;
+        const diffY = e.changedTouches[0].clientY - touchStartY;
+        if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
+          if (diffX < 0) {
+            setLoginSlide(1); // Deslizar hacia la izquierda -> Docente
+          } else {
+            setLoginSlide(0); // Deslizar hacia la derecha -> Alumno
+          }
+        }
+      },
+      { passive: true }
+    );
+  }
+
   function updateWelcomeSessionsDropdown() {
     if (!el.welcomeStudentSessionSelect) return;
     const accessible = (state.sessions || []).filter(
@@ -7689,6 +7886,8 @@
     if (el.btnCloseWelcomeModal) {
       el.btnCloseWelcomeModal.classList.toggle('hidden', !dismissible);
     }
+    // SIEMPRE mostrar primero el formulario de Alumno
+    setLoginSlide(0);
     openModal(el.welcomeRoleModal);
   }
 

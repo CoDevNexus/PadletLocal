@@ -85,18 +85,43 @@ Al usar certificados de seguridad locales sin internet, los navegadores muestran
 
 ## 🎯 Funcionalidades Principales para el Aula
 
+### 🎬 Modo Demostración Integrado (Para Reels, YouTube y Marketing)
+- **Generador de Sesión Demo en 1 Clic:** Crea instantáneamente una sesión enriquecida y lista para grabar videos promocionales, reels o tutoriales en YouTube (`🎬 Sesión Demo · Academia IA 2026`).
+- **Contenido precargado de alto impacto:** Incluye logotipo institucional vectorizado, consigna de clase fijada, post docente destacado con comentarios, entrega de alumno con **gráfico vectorial de precisión y matriz de confusión SVG 100% offline**, código YOLOv8 y consultas de programación resueltas.
+- **Interacción simulada:** Precarga 10 mensajes de chat en vivo y alumnos ficticios en la cola de pantalla compartida.
+- **Regla de integridad y orden:** Solo se permite **una sola sesión demo a la vez**. Para generar una nueva demostración, el sistema solicita eliminar la anterior con confirmación segura.
+
+### 📱 Acceso con Deslizamiento Táctil / Slider Horizontal (Alumno Primero)
+- **Diseño enfocado de una sola vista:** Muestra un único formulario en pantalla a la vez para eliminar la sobrecarga cognitiva en los participantes.
+- **Navegación por deslizamiento (Swipe):** Permite cambiar entre el rol de **Alumno** y **Docente** deslizando horizontalmente con el dedo en pantallas táctiles o móviles, o haciendo clic en el selector segmentado y flechas de navegación en computadoras.
+- **Prioridad fija para Alumnos:** Al abrir el diálogo de bienvenida o recargar la página, el formulario de **Alumno se muestra siempre en primer lugar** de forma predeterminada.
+- **Inicio de sesión directo:** Cada formulario cuenta con validación instantánea y botón de acceso específico para su rol.
+
+### 🪟 Ventanas Flotantes Pop-Out (`🪟 Flotante` para Pantallas Inalámbricas y Monitores Extendidos)
+- **Separación de pantalla con 1 clic:** Cualquier transmisión de pantalla WebRTC o publicación de la pizarra cuenta con el botón **`🪟 Flotante`**.
+- **Ideal para proyección múltiple:** Permite desacoplar una pantalla a una ventana flotante sin bordes del navegador para arrastrarla a proyectores HDMI, televisores o pantallas inalámbricas (Miracast, Chromecast, AirPlay).
+- **Retorno instantáneo:** Al cerrar la ventana externa o presionar **`↩ Regresar`**, la pantalla o tarjeta regresa automáticamente al flujo del tablero sin interrupciones.
+
+### 💬 Chat Interactivo en Vivo con Canales Privados y Notificaciones Inteligentes
+- **Hilos públicos y privados:** Permite comunicación grupal para toda la clase o conversaciones privadas individuales entre docente y alumno o entre compañeros, manteniendo privacidad total en red local.
+- **Lista de participantes conectados:** Muestra en tiempo real qué usuarios están en línea con acceso rápido para iniciar un chat privado.
+- **Badges de mensajes no leídos:** Indicador numérico visual en rojo con el total de mensajes pendientes por leer.
+- **Silenciador selectivo:** Control para silenciar alertas de sonido globalmente o para un hilo privado específico.
+- **Multimedia y personalización:** Soporte para adjuntar imágenes/fotos en el chat, selector de emojis y cambio de apodo (nick) persistente.
+
 ### 📋 Pizarra de Padlets
 - **Escribir aportes:** Publica respuestas con tu nombre, tema, texto y fotos adjuntas.
 - **Pegar imágenes directo:** Puedes arrastrar archivos de imagen o pegar capturas de pantalla directamente con **`Ctrl + V`**.
 - **Mover respuestas arrastrándolas (Drag & Drop):** Toma cualquier tarjeta desde el icono **`⠿`** y muévela a otra posición de la pizarra para organizar las ideas.
 - **Destacar respuestas (`⭐`):** Marca las mejores intervenciones con una estrella para resaltarlas con marco dorado, y usa el filtro **`⭐ Destacadas`** para verlas todas juntas.
 - **Visto de revisión (`✓✓ Revisada`):** El profesor puede marcar qué respuestas ya fueron revisadas para llevar el control visual de la clase.
-- **Visualización inteligente:** Cuando hay muchas respuestas, el tablero se adapta a formato compacto; al hacer clic en cualquier tarjeta pequeña, esta crece para leerla con comodidad.
+- **Visualización inteligente:** Cuando hay muchas respuestas, el tablero se adapta a formato compacto; al hacer clic en cualquier tarjeta pequeña, esta crece para leerla con comodidad con vista previa en modal ampliado.
 
 ### 🖥️ Transmisión de Pantalla en Vivo (WebRTC)
 - **Pestaña separada:** Las pantallas compartidas tienen su propia sección (**Pantallas y Cola**) para no saturar la pizarra de texto.
 - **Sencillo y directo:** Para compartir pantalla solo se pide **Nombre** y **Motivo**.
-- **Cola de turnos:** Los alumnos pueden pedir turno para exponer de forma ordenada sin interrumpir.
+- **Cola de turnos y re-encolado:** Los alumnos pueden pedir turno para exponer de forma ordenada y volver a encolar su pantalla si el docente ya revisó su trabajo inicial.
+- **Prioridad inteligente:** La pantalla del profesor siempre se posiciona en primer lugar con distintivo oficial de docente.
 - **Control docente:** El profesor puede pausar/cortar temporalmente una pantalla (`✂ Cortar`) o retomarla en cualquier momento (`▶ Retomar`).
 
 ### 🧠 Evaluaciones y Quizzes con Análisis de Entendimiento
@@ -107,8 +132,12 @@ Al usar certificados de seguridad locales sin internet, los navegadores muestran
 
 ### 📝 Temas de Tareas y Temporizadores Docentes
 - **Consignas fijadas:** Instrucciones de trabajo en la parte superior que crecen al hacer clic.
-- **Recesos y Timers sincronizados:** Cuenta regresiva visible para todos con tono de alerta y **modo proyector (pantalla completa)** para el aula.
-- **Avisos sonoros en tiempo real:** Envío de notificaciones instantáneas sin necesidad de internet.
+- **Reloj ampliado y temporizadores sincronizados:** Reloj de cabecera de doble línea de alta visibilidad, descansos programados (5, 10, 15+ min) y **modo proyector (pantalla completa)** para el aula.
+- **Avisos y notificaciones modernas:** Integración con alertas modernas tipo SweetAlert2 funcionando **100% offline** sin internet.
+
+### 🏫 Marca Institucional Adaptativa
+- **Soporte de logotipos:** Permite cargar insignias o logos cuadrados (`1:1`) o panorámicos/rectangulares (`wide`), adaptando automáticamente la cabecera sin recortes.
+- **Configuración de evento:** Permite personalizar el nombre de la institución, título del evento y descripción de la sesión.
 
 ### 🌱 Modo Fácil vs ⚡ Modo Completo
 - **Modo Fácil (`🌱`):** Pensado para personas con poca afinidad tecnológica. Botones grandes, claros y sin opciones complejas.

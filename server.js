@@ -1015,6 +1015,9 @@ function buildSessionSnapshot(sessionId, { socketId = null, isTeacher = false } 
       scheduledTimers: [],
       activeQuiz: null,
       screenQueue: [],
+      isDemo: false,
+      hasDemoSession: store.hasDemoSession(),
+      demoSessionId: store.getDemoSession()?.id || null,
       serverTime: Date.now(),
       onlineCount: io.engine.clientsCount,
     };
@@ -1024,10 +1027,14 @@ function buildSessionSnapshot(sessionId, { socketId = null, isTeacher = false } 
     socketId,
     sessionId: session.id,
     activeSessionId: session.id,
+    isDemo: Boolean(session.isDemo),
+    hasDemoSession: store.hasDemoSession(),
+    demoSessionId: store.getDemoSession()?.id || null,
     sessionStatus: {
       isPublished: session.isPublished !== false,
       isClosed: Boolean(session.isClosed),
       hideFromStudents: Boolean(session.hideFromStudents),
+      isDemo: Boolean(session.isDemo),
     },
     sessions,
     board: session.board,
@@ -1387,6 +1394,112 @@ io.on('connection', (socket) => {
           session,
           sessions: store.getSessionsSummary({ onlyPublished: false }),
           activeSessionId: socket.data.sessionId,
+        });
+      }
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:session:create-demo', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      socket.data.isTeacher = true;
+
+      if (store.hasDemoSession()) {
+        const existing = store.getDemoSession();
+        throw new Error(
+          `Ya existe una sesión demo activa ("${existing?.name || 'Sesión Demo'}"). Para crear una nueva, primero debes eliminar la sesión demo existente.`
+        );
+      }
+
+      const session = store.createDemoSession({
+        teacherName: payload?.teacherName || socket.data.authorName || 'Prof. Carlos Méndez',
+      });
+
+      // Populate demo screen queue in server map
+      setSessionQueue(session.id, [
+        {
+          id: crypto.randomUUID(),
+          authorId: 'std_mateo',
+          author: 'Mateo Rossi',
+          reason: 'Demostración de inferencia YOLOv8 a 60 FPS',
+          status: 'waiting',
+          createdAt: Date.now() - 600000,
+        },
+        {
+          id: crypto.randomUUID(),
+          authorId: 'std_sofia',
+          author: 'Sofía Albarracín',
+          reason: 'Revisión de arquitectura convolucional en proyector',
+          status: 'waiting',
+          createdAt: Date.now() - 300000,
+        },
+      ]);
+
+      joinSocketToSession(socket, session.id);
+      broadcastSessionsSummaryToAll();
+
+      socket.emit('session:synced', {
+        ...buildSessionSnapshot(session.id, { socketId: socket.id, isTeacher: true }),
+        reasonMessage: `🎬 ¡Sesión Demo creada exitosamente! ("${session.name}")`,
+      });
+
+      if (typeof ack === 'function') {
+        ack({
+          ok: true,
+          session,
+          sessions: store.getSessionsSummary({ onlyPublished: false }),
+          activeSessionId: session.id,
+        });
+      }
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('teacher:session:delete-demo', (payload, ack) => {
+    try {
+      requireTeacher(payload?.teacherToken);
+      socket.data.isTeacher = true;
+
+      const demo = store.getDemoSession();
+      if (!demo) {
+        throw new Error('No existe ninguna sesión demo activa para eliminar.');
+      }
+
+      const targetId = demo.id;
+      const affectedSockets = getRoomSockets(targetId);
+      const result = store.deleteSession(targetId);
+      const fallbackForTeacher = result.activeSession;
+      const fallbackForStudent = store.getDefaultStudentSession();
+
+      for (const sock of affectedSockets) {
+        if (sock.data.isTeacher) {
+          joinSocketToSession(sock, fallbackForTeacher.id);
+          sock.emit('session:synced', {
+            ...buildSessionSnapshot(fallbackForTeacher.id, { socketId: sock.id, isTeacher: true }),
+            reasonMessage: `Sesión demo eliminada. Ahora estás en "${fallbackForTeacher.name}".`,
+          });
+        } else {
+          sock.leave(sessionRoom(targetId));
+          sock.data.sessionId = null;
+          sock.emit('session:unavailable', {
+            reason: 'El profesor eliminó la sesión demo. Selecciona otra sesión habilitada.',
+            sessions: store.getSessionsSummary({ onlyPublished: true }),
+            suggestedSessionId: fallbackForStudent ? fallbackForStudent.id : null,
+          });
+        }
+      }
+
+      broadcastSessionsSummaryToAll();
+
+      if (typeof ack === 'function') {
+        ack({
+          ok: true,
+          deletedId: targetId,
+          activeSessionId: socket.data.sessionId,
+          sessions: store.getSessionsSummary({ onlyPublished: false }),
         });
       }
     } catch (err) {
