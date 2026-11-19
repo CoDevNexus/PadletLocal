@@ -926,61 +926,65 @@ io.on('connection', (socket) => {
 
   // Register client authorId, authorName, role & optional teacher status
   socket.on('client:register', ({ authorId, authorName, teacherToken, teacherName } = {}, ack) => {
-    if (authorId && typeof authorId === 'string') {
-      socketAuthors.set(socket.id, authorId.slice(0, 80));
-      socket.data.authorId = authorId.slice(0, 80);
-    }
-    const nowTeacher = isValidTeacherToken(teacherToken);
-    const teacherChanged = socket.data.isTeacher !== nowTeacher;
-    socket.data.isTeacher = nowTeacher;
-    const cleanAuthorName = authorName ? String(authorName).trim().slice(0, 50) : '';
-    const cleanTeacherName = teacherName ? String(teacherName).trim().slice(0, 50) : '';
-    socket.data.authorName = cleanAuthorName;
-    socket.data.teacherName = cleanTeacherName;
-
-    const displayName = nowTeacher
-      ? (cleanTeacherName || 'Docente')
-      : (cleanAuthorName || 'Alumno');
-
-    connectedClients.set(socket.id, {
-      socketId: socket.id,
-      authorId: socket.data.authorId || socket.id,
-      name: displayName,
-      role: nowTeacher ? 'teacher' : 'student',
-      isTeacher: nowTeacher,
-      sessionId: socket.data.sessionId || null,
-    });
-
-    // If teacher just logged in (or logged out), refresh their session view & hidden posts
-    if (teacherChanged) {
-      let sid = socket.data.sessionId;
-      if (nowTeacher && !sid) {
-        sid = store.getActiveSessionId();
-        joinSocketToSession(socket, sid);
-      } else if (!nowTeacher && sid) {
-        const cur = store.getSessionById(sid);
-        if (!cur || !cur.isPublished || cur.hideFromStudents) {
-          const fallback = store.getDefaultStudentSession();
-          joinSocketToSession(socket, fallback ? fallback.id : null);
-          sid = socket.data.sessionId;
-        }
+    try {
+      if (authorId && typeof authorId === 'string') {
+        socketAuthors.set(socket.id, authorId.slice(0, 80));
+        socket.data.authorId = authorId.slice(0, 80);
       }
-      socket.emit(
-        'session:synced',
-        buildSessionSnapshot(sid, { socketId: socket.id, isTeacher: nowTeacher })
-      );
-    }
+      const nowTeacher = isValidTeacherToken(teacherToken);
+      const teacherChanged = socket.data.isTeacher !== nowTeacher;
+      socket.data.isTeacher = nowTeacher;
+      const cleanAuthorName = authorName ? String(authorName).trim().slice(0, 50) : '';
+      const cleanTeacherName = teacherName ? String(teacherName).trim().slice(0, 50) : '';
+      socket.data.authorName = cleanAuthorName;
+      socket.data.teacherName = cleanTeacherName;
 
-    if (socket.data.sessionId) {
-      broadcastPresence(socket.data.sessionId);
-    }
+      const displayName = nowTeacher
+        ? (cleanTeacherName || 'Docente')
+        : (cleanAuthorName || 'Alumno');
 
-    if (typeof ack === 'function') {
-      ack({
-        ok: true,
+      connectedClients.set(socket.id, {
+        socketId: socket.id,
+        authorId: socket.data.authorId || socket.id,
+        name: displayName,
+        role: nowTeacher ? 'teacher' : 'student',
         isTeacher: nowTeacher,
-        sessions: store.getSessionsSummary({ isTeacher: nowTeacher, onlyPublished: !nowTeacher }),
+        sessionId: socket.data.sessionId || null,
       });
+
+      // If teacher just logged in (or logged out), refresh their session view & hidden posts
+      if (teacherChanged) {
+        let sid = socket.data.sessionId;
+        if (nowTeacher && !sid) {
+          sid = store.getActiveSessionId();
+          joinSocketToSession(socket, sid);
+        } else if (!nowTeacher && sid) {
+          const cur = store.getSessionById(sid);
+          if (!cur || !cur.isPublished || cur.hideFromStudents) {
+            const fallback = store.getDefaultStudentSession();
+            joinSocketToSession(socket, fallback ? fallback.id : null);
+            sid = socket.data.sessionId;
+          }
+        }
+        socket.emit(
+          'session:synced',
+          buildSessionSnapshot(sid, { socketId: socket.id, isTeacher: nowTeacher })
+        );
+      }
+
+      if (socket.data.sessionId) {
+        broadcastPresence(socket.data.sessionId);
+      }
+
+      if (typeof ack === 'function') {
+        ack({
+          ok: true,
+          isTeacher: nowTeacher,
+          sessions: store.getSessionsSummary({ isTeacher: nowTeacher, onlyPublished: !nowTeacher }),
+        });
+      }
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
     }
   });
 
@@ -1922,20 +1926,24 @@ io.on('connection', (socket) => {
   });
 
   socket.on('screen-queue:leave', (payload, ack) => {
-    const sid = socket.data.sessionId;
-    if (!sid) return typeof ack === 'function' && ack({ ok: true });
-    const { id, authorId } = payload || {};
-    const queue = getSessionQueue(sid);
-    const filtered = queue.filter((q) => {
-      if (id && q.id === id) return q.authorId !== authorId;
-      if (!id && authorId && q.authorId === authorId) return false;
-      return true;
-    });
-    if (filtered.length !== queue.length) {
-      setSessionQueue(sid, filtered);
-      broadcastScreenQueue(sid);
+    try {
+      const sid = socket.data.sessionId;
+      if (!sid) return typeof ack === 'function' && ack({ ok: true });
+      const { id, authorId } = payload || {};
+      const queue = getSessionQueue(sid);
+      const filtered = queue.filter((q) => {
+        if (id && q.id === id) return q.authorId !== authorId;
+        if (!id && authorId && q.authorId === authorId) return false;
+        return true;
+      });
+      if (filtered.length !== queue.length) {
+        setSessionQueue(sid, filtered);
+        broadcastScreenQueue(sid);
+      }
+      if (typeof ack === 'function') ack({ ok: true });
+    } catch (err) {
+      if (typeof ack === 'function') ack({ ok: false, error: err.message });
     }
-    if (typeof ack === 'function') ack({ ok: true });
   });
 
   socket.on('teacher:screen-queue:call', (payload, ack) => {
@@ -2042,55 +2050,79 @@ io.on('connection', (socket) => {
   });
 
   socket.on('screen:stop', ({ postId } = {}) => {
-    const share = activeShares.get(postId);
-    if (share && share.sharerSocketId === socket.id) {
-      stopScreenShare(postId, 'stopped');
+    try {
+      const share = activeShares.get(postId);
+      if (share && share.sharerSocketId === socket.id) {
+        stopScreenShare(postId, 'stopped');
+      }
+    } catch (err) {
+      console.warn('Error in screen:stop:', err.message);
     }
   });
 
   socket.on('screen:watch', ({ postId } = {}) => {
-    const share = activeShares.get(postId);
-    if (!share || share.sharerSocketId === socket.id) return;
+    try {
+      const share = activeShares.get(postId);
+      if (!share || share.sharerSocketId === socket.id) return;
 
-    share.watchers.add(socket.id);
-    io.to(share.sharerSocketId).emit('screen:watcher-joined', {
-      postId,
-      watcherId: socket.id,
-    });
-    io.to(sessionRoom(share.sessionId)).emit('screen:viewers', {
-      postId,
-      viewerCount: share.watchers.size,
-    });
+      share.watchers.add(socket.id);
+      io.to(share.sharerSocketId).emit('screen:watcher-joined', {
+        postId,
+        watcherId: socket.id,
+      });
+      io.to(sessionRoom(share.sessionId)).emit('screen:viewers', {
+        postId,
+        viewerCount: share.watchers.size,
+      });
+    } catch (err) {
+      console.warn('Error in screen:watch:', err.message);
+    }
   });
 
   socket.on('screen:unwatch', ({ postId } = {}) => {
-    const share = activeShares.get(postId);
-    if (!share || !share.watchers.has(socket.id)) return;
+    try {
+      const share = activeShares.get(postId);
+      if (!share || !share.watchers.has(socket.id)) return;
 
-    share.watchers.delete(socket.id);
-    io.to(share.sharerSocketId).emit('screen:watcher-left', {
-      postId,
-      watcherId: socket.id,
-    });
-    io.to(sessionRoom(share.sessionId)).emit('screen:viewers', {
-      postId,
-      viewerCount: share.watchers.size,
-    });
+      share.watchers.delete(socket.id);
+      io.to(share.sharerSocketId).emit('screen:watcher-left', {
+        postId,
+        watcherId: socket.id,
+      });
+      io.to(sessionRoom(share.sessionId)).emit('screen:viewers', {
+        postId,
+        viewerCount: share.watchers.size,
+      });
+    } catch (err) {
+      console.warn('Error in screen:unwatch:', err.message);
+    }
   });
 
   socket.on('webrtc:offer', ({ to, postId, offer } = {}) => {
-    if (!to || !postId || !offer) return;
-    io.to(to).emit('webrtc:offer', { from: socket.id, postId, offer });
+    try {
+      if (!to || !postId || !offer) return;
+      io.to(to).emit('webrtc:offer', { from: socket.id, postId, offer });
+    } catch (err) {
+      console.warn('Error in webrtc:offer:', err.message);
+    }
   });
 
   socket.on('webrtc:answer', ({ to, postId, answer } = {}) => {
-    if (!to || !postId || !answer) return;
-    io.to(to).emit('webrtc:answer', { from: socket.id, postId, answer });
+    try {
+      if (!to || !postId || !answer) return;
+      io.to(to).emit('webrtc:answer', { from: socket.id, postId, answer });
+    } catch (err) {
+      console.warn('Error in webrtc:answer:', err.message);
+    }
   });
 
   socket.on('webrtc:ice-candidate', ({ to, postId, candidate } = {}) => {
-    if (!to || !postId || !candidate) return;
-    io.to(to).emit('webrtc:ice-candidate', { from: socket.id, postId, candidate });
+    try {
+      if (!to || !postId || !candidate) return;
+      io.to(to).emit('webrtc:ice-candidate', { from: socket.id, postId, candidate });
+    } catch (err) {
+      console.warn('Error in webrtc:ice-candidate:', err.message);
+    }
   });
 
   // --- Real-Time Chat System (Per-Session with Strict Privacy) ---
