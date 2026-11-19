@@ -808,6 +808,7 @@
     postDetailCommentsWrap: document.getElementById('postDetailCommentsWrap'),
     btnDownloadPostText: document.getElementById('btnDownloadPostText'),
     btnDownloadPostImage: document.getElementById('btnDownloadPostImage'),
+    btnPopoutPostDetail: document.getElementById('btnPopoutPostDetail'),
 
     // Screen audience selector
     optAudienceAll: document.getElementById('optAudienceAll'),
@@ -2937,13 +2938,32 @@
   const screenManager = new window.ScreenShareManager(socket, {
     onStreamReady(postId, stream, isLocal) {
       const cardEl = document.querySelector(`.card[data-post-id="${CSS.escape(postId)}"]`);
-      if (!cardEl) return;
-      attachVideoUI(cardEl, postId, stream, isLocal);
+      if (cardEl) {
+        attachVideoUI(cardEl, postId, stream, isLocal);
+      }
+      if (typeof isPostPoppedOut === 'function' && isPostPoppedOut(postId)) {
+        const entry = activePopouts.get(postId);
+        const popVideo = entry?.window?.document?.getElementById('popoutVideo');
+        if (popVideo) {
+          screenManager.attachStreamToVideo(postId, popVideo);
+          const popOverlay = entry.window?.document?.getElementById('popoutStatusOverlay');
+          if (popOverlay) popOverlay.classList.add('hidden');
+        }
+      }
     },
     onStreamStopped(postId) {
       const post = state.posts.find((p) => p.id === postId);
       if (post) {
         post.screenShare = null;
+      }
+      if (typeof isPostPoppedOut === 'function' && isPostPoppedOut(postId)) {
+        const entry = activePopouts.get(postId);
+        const popOverlay = entry?.window?.document?.getElementById('popoutStatusOverlay');
+        const popMsg = entry?.window?.document?.getElementById('popoutStatusMsg');
+        if (popOverlay && popMsg) {
+          popMsg.textContent = 'Transmisión de pantalla finalizada.';
+          popOverlay.classList.remove('hidden');
+        }
       }
       refreshCard(postId);
       renderTopicBar();
@@ -3821,6 +3841,15 @@
     }
     if (isSessionChange) {
       screenManager.stopAll();
+      if (typeof activePopouts !== 'undefined') {
+        for (const [, entry] of activePopouts.entries()) {
+          if (entry.window && !entry.window.closed) {
+            try { entry.window.close(); } catch {}
+          }
+          if (entry.checkTimer) clearInterval(entry.checkTimer);
+        }
+        activePopouts.clear();
+      }
       state.activeTopic = '__ALL__';
       state.expandedTaskId = null;
       state.focusedCardId = null;
@@ -4298,6 +4327,20 @@
       playChime(paused ? 'warning' : 'info');
     }
 
+    if (typeof isPostPoppedOut === 'function' && isPostPoppedOut(postId)) {
+      const entry = activePopouts.get(postId);
+      const popOverlay = entry?.window?.document?.getElementById('popoutStatusOverlay');
+      const popMsg = entry?.window?.document?.getElementById('popoutStatusMsg');
+      if (popOverlay && popMsg) {
+        if (paused) {
+          popMsg.textContent = '⏸ Pantalla pausada por el profesor.';
+          popOverlay.classList.remove('hidden');
+        } else {
+          popOverlay.classList.add('hidden');
+        }
+      }
+    }
+
     refreshCard(postId);
   });
 
@@ -4669,12 +4712,555 @@
     return true;
   }
 
+  // --- Floating Pop-out Window Manager (Pantalla flotante / inalámbrica / secundaria) ---
+  const activePopouts = new Map(); // postId -> { window: winRef, type: 'screen' | 'post', checkTimer }
+
+  function isPostPoppedOut(postId) {
+    if (!postId) return false;
+    const entry = activePopouts.get(postId);
+    if (!entry || !entry.window || entry.window.closed) {
+      if (entry?.checkTimer) clearInterval(entry.checkTimer);
+      activePopouts.delete(postId);
+      return false;
+    }
+    return true;
+  }
+
+  function returnPopout(postId) {
+    const entry = activePopouts.get(postId);
+    if (entry && entry.window && !entry.window.closed) {
+      try {
+        entry.window.close();
+      } catch (e) {}
+    }
+    if (entry?.checkTimer) clearInterval(entry.checkTimer);
+    activePopouts.delete(postId);
+    try {
+      window.focus();
+    } catch (e) {}
+    refreshCard(postId);
+    updatePostDetailPopoutBtn();
+    showToast('Publicación devuelta al panel principal', 'info');
+  }
+
+  function updatePostDetailPopoutBtn() {
+    if (!el.btnPopoutPostDetail || !activeDetailPost) return;
+    const isPopped = isPostPoppedOut(activeDetailPost.id);
+    if (isPopped) {
+      el.btnPopoutPostDetail.textContent = '↩ Regresar al panel';
+      el.btnPopoutPostDetail.classList.add('btn-primary');
+      el.btnPopoutPostDetail.classList.remove('btn-secondary');
+    } else {
+      el.btnPopoutPostDetail.textContent = '🪟 Pantalla flotante';
+      el.btnPopoutPostDetail.classList.remove('btn-primary');
+      el.btnPopoutPostDetail.classList.add('btn-secondary');
+    }
+  }
+
+  function generatePopoutHTML(post, isScreen) {
+    const topicEsc = escapeHtml(post.topic || (isScreen ? 'Pantalla compartida' : 'Publicación'));
+    const authorEsc = escapeHtml(post.author || 'Anónimo');
+    const authorRoleBadge = post.authorIsTeacher ? '🎓 Profesor' : '🎒 Alumno';
+    const isTeacher = Boolean(post.authorIsTeacher);
+    const avatarColor = getAvatarColor(post.authorId || post.author);
+    const initials = escapeHtml(getInitials(post.author));
+    const timeStr = formatRelativeTime(post.createdAt);
+    const comments = Array.isArray(post.comments) ? post.comments : [];
+
+    const badges = [];
+    if (post.assignmentTitle) {
+      badges.push(`<span class="popout-badge">📝 Tarea: ${escapeHtml(post.assignmentTitle)}</span>`);
+    }
+    if (post.highlighted) badges.push('<span class="popout-badge" style="background:#eab308;color:#000;">⭐ Destacada</span>');
+    if (post.reviewed) badges.push('<span class="popout-badge" style="background:#10b981;color:#fff;">✓✓ Revisada</span>');
+    if (post.pinned) badges.push('<span class="popout-badge" style="background:#6366f1;color:#fff;">📌 Fijado</span>');
+
+    const commentsListHtml = comments.map(c => `
+      <div class="popout-comment-item">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:0.85rem;">
+          <strong style="color:#60a5fa;">${escapeHtml(c.author)}</strong>
+          <span style="color:#64748b;font-size:0.75rem;">${formatRelativeTime(c.createdAt)}</span>
+        </div>
+        <div style="color:#cbd5e1;line-height:1.45;">${formatTextWithLinks(c.text)}</div>
+      </div>
+    `).join('');
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${isScreen ? '🖥️ Pantalla' : '🪟 Post'}: ${topicEsc} (${authorEsc}) · PadletLocal</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #111827;
+      --surface-border: #1f293d;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .popout-topbar {
+      height: 52px;
+      min-height: 52px;
+      background: rgba(17, 24, 39, 0.96);
+      border-bottom: 1px solid var(--surface-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      gap: 12px;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+    .popout-topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .popout-logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #1e293b;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #93c5fd;
+      border: 1px solid #334155;
+      flex-shrink: 0;
+    }
+    .popout-title-text {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #ffffff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .popout-topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .popout-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .popout-btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #3b82f6;
+    }
+    .popout-btn-primary:hover {
+      background: #1d4ed8;
+    }
+    .popout-btn-secondary {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-color: #334155;
+    }
+    .popout-btn-secondary:hover {
+      background: #334155;
+    }
+    .popout-btn-zoom {
+      padding: 5px 10px;
+      font-size: 0.9rem;
+      font-weight: bold;
+    }
+    .popout-main {
+      flex: 1;
+      width: 100%;
+      height: calc(100% - 52px);
+      position: relative;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .popout-video-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .popout-video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    .popout-status-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid #334155;
+      padding: 24px 32px;
+      border-radius: 12px;
+      text-align: center;
+      color: #f8fafc;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+      z-index: 10;
+    }
+    .popout-status-overlay.hidden { display: none !important; }
+    .popout-post-wrap {
+      max-width: 980px;
+      width: 100%;
+      margin: 28px auto;
+      padding: 32px 36px;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 16px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+    }
+    .popout-author-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .popout-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.15rem;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .popout-author-name {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .popout-role-badge {
+      font-size: 0.74rem;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #334155;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .popout-role-badge.is-teacher {
+      background: #1e3a8a;
+      color: #93c5fd;
+    }
+    .popout-time {
+      font-size: 0.82rem;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .popout-badges-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .popout-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+    }
+    .popout-topic {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #60a5fa;
+      margin: 0 0 20px 0;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+    .popout-img-box {
+      margin: 20px 0 26px 0;
+      text-align: center;
+      background: #030712;
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid #1f2937;
+    }
+    .popout-img {
+      max-width: 100%;
+      max-height: 520px;
+      border-radius: 8px;
+      object-fit: contain;
+    }
+    .popout-text {
+      font-size: 1.35rem;
+      line-height: 1.68;
+      color: #f1f5f9;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .popout-comments-box {
+      margin-top: 36px;
+      padding-top: 24px;
+      border-top: 1px solid #1f2937;
+    }
+    .popout-comment-item {
+      padding: 12px 16px;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    @media (max-width: 720px) {
+      .popout-post-wrap {
+        margin: 12px;
+        padding: 20px 22px;
+      }
+      .popout-topic {
+        font-size: 1.5rem;
+      }
+      .popout-text {
+        font-size: 1.15rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="popout-topbar">
+    <div class="popout-topbar-left">
+      <span class="popout-logo-badge">${isScreen ? '🖥️ Pantalla' : '🪟 Publicación'}</span>
+      <span class="popout-title-text">${topicEsc} · <small style="color:#94a3b8;">${authorEsc}</small></span>
+    </div>
+    <div class="popout-topbar-right">
+      ${!isScreen ? `
+        <button type="button" id="btnZoomOut" class="popout-btn popout-btn-secondary popout-btn-zoom" title="Reducir tamaño de letra">A-</button>
+        <button type="button" id="btnZoomIn" class="popout-btn popout-btn-secondary popout-btn-zoom" title="Aumentar tamaño de letra">A+</button>
+      ` : `
+        <button type="button" id="btnPopoutAudio" class="popout-btn popout-btn-secondary" title="Activar/silenciar audio">🔇 Audio</button>
+      `}
+      <button type="button" id="btnFullscreen" class="popout-btn popout-btn-secondary" title="Pantalla completa (F11)">⛶ Pantalla completa</button>
+      <button type="button" id="btnReturn" class="popout-btn popout-btn-primary" title="Cerrar ventana flotante y regresar al panel principal">↩️ Regresar al panel</button>
+    </div>
+  </header>
+
+  <main class="popout-main">
+    ${isScreen ? `
+      <div class="popout-video-container">
+        <video id="popoutVideo" class="popout-video" autoplay playsinline muted></video>
+        <div id="popoutStatusOverlay" class="popout-status-overlay hidden">
+          <div style="font-size:2.2rem;margin-bottom:8px;">⏸️</div>
+          <strong id="popoutStatusMsg" style="font-size:1.1rem;margin-bottom:6px;display:block;">Transmisión pausada o reconectando...</strong>
+          <button type="button" class="popout-btn popout-btn-primary" onclick="if(window.opener&&!window.opener.closed){window.opener.focus();}window.close();" style="margin-top:10px;">↩ Regresar al panel</button>
+        </div>
+      </div>
+    ` : `
+      <div class="popout-post-wrap">
+        <div class="popout-author-row">
+          <div class="popout-avatar" style="background:${avatarColor}">${initials}</div>
+          <div class="popout-author-info">
+            <div class="popout-author-name">
+              ${authorEsc}
+              <span class="popout-role-badge ${isTeacher ? 'is-teacher' : ''}">${authorRoleBadge}</span>
+            </div>
+            <div class="popout-time">${timeStr}</div>
+          </div>
+        </div>
+
+        ${badges.length ? `<div class="popout-badges-row">${badges.join('')}</div>` : ''}
+
+        <h1 class="popout-topic">${topicEsc}</h1>
+
+        ${post.imageUrl ? `
+          <div class="popout-img-box">
+            <img src="${escapeHtml(post.imageUrl)}" alt="${topicEsc}" class="popout-img" />
+          </div>
+        ` : ''}
+
+        <div class="popout-text">${post.content ? formatTextWithLinks(post.content) : '<em style="color:#64748b;">(Sin texto escrito)</em>'}</div>
+
+        ${comments.length ? `
+          <div class="popout-comments-box">
+            <h3 style="font-size:1.05rem;color:#94a3b8;margin-bottom:14px;">💬 Comentarios (${comments.length})</h3>
+            ${commentsListHtml}
+          </div>
+        ` : ''}
+
+        <div style="margin-top:36px;display:flex;justify-content:flex-end;">
+          <button type="button" class="popout-btn popout-btn-primary" onclick="if(window.opener&&!window.opener.closed){window.opener.focus();}window.close();">↩ Regresar al panel</button>
+        </div>
+      </div>
+    `}
+  </main>
+
+  <script>
+    const btnReturn = document.getElementById('btnReturn');
+    if (btnReturn) {
+      btnReturn.addEventListener('click', () => {
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.focus();
+          }
+        } catch (e) {}
+        window.close();
+      });
+    }
+
+    const btnFullscreen = document.getElementById('btnFullscreen');
+    if (btnFullscreen) {
+      btnFullscreen.addEventListener('click', () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        } else {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      });
+    }
+
+    const textEl = document.querySelector('.popout-text');
+    let currentZoom = 1.35;
+    const btnZoomIn = document.getElementById('btnZoomIn');
+    const btnZoomOut = document.getElementById('btnZoomOut');
+    if (btnZoomIn && textEl) {
+      btnZoomIn.addEventListener('click', () => {
+        currentZoom = Math.min(2.6, currentZoom + 0.15);
+        textEl.style.fontSize = currentZoom + 'rem';
+      });
+    }
+    if (btnZoomOut && textEl) {
+      btnZoomOut.addEventListener('click', () => {
+        currentZoom = Math.max(0.9, currentZoom - 0.15);
+        textEl.style.fontSize = currentZoom + 'rem';
+      });
+    }
+
+    const videoEl = document.getElementById('popoutVideo');
+    const btnAudio = document.getElementById('btnPopoutAudio');
+    if (btnAudio && videoEl) {
+      btnAudio.addEventListener('click', () => {
+        videoEl.muted = !videoEl.muted;
+        btnAudio.textContent = videoEl.muted ? '🔇 Audio' : '🔊 Audio activo';
+      });
+    }
+  <\/script>
+</body>
+</html>`;
+  }
+
+  function setupPopoutWindow(popWin, post, isScreen) {
+    if (isScreen) {
+      const popVideo = popWin.document.getElementById('popoutVideo');
+      if (popVideo) {
+        screenManager.attachStreamToVideo(post.id, popVideo);
+        const streamInfo = screenManager.getStream(post.id);
+        const hasAudio = streamInfo?.stream?.getAudioTracks()?.length > 0;
+        const btnAudio = popWin.document.getElementById('btnPopoutAudio');
+        if (btnAudio && !hasAudio) {
+          btnAudio.style.display = 'none';
+        }
+      }
+    }
+
+    const checkTimer = setInterval(() => {
+      if (!popWin || popWin.closed) {
+        clearInterval(checkTimer);
+        activePopouts.delete(post.id);
+        refreshCard(post.id);
+        updatePostDetailPopoutBtn();
+      }
+    }, 500);
+
+    const entry = activePopouts.get(post.id);
+    if (entry) {
+      entry.checkTimer = checkTimer;
+    }
+  }
+
+  function openPopoutForPost(postId) {
+    const post = state.posts.find((p) => p.id === postId);
+    if (!post) return;
+
+    if (isPostPoppedOut(postId)) {
+      const entry = activePopouts.get(postId);
+      try {
+        entry.window.focus();
+      } catch {}
+      return;
+    }
+
+    const isScreen = isScreenPost(post);
+    const screenW = window.screen.availWidth || 1280;
+    const screenH = window.screen.availHeight || 720;
+    const width = Math.min(1080, Math.floor(screenW * 0.85));
+    const height = Math.min(760, Math.floor(screenH * 0.85));
+    const left = Math.max(0, Math.floor((screenW - width) / 2));
+    const top = Math.max(0, Math.floor((screenH - height) / 2));
+
+    const popWin = window.open(
+      '',
+      `padlet_popout_${post.id.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes`
+    );
+
+    if (!popWin) {
+      showToast('Tu navegador bloqueó la ventana emergente. Por favor permite popups para esta página.', 'warning');
+      return;
+    }
+
+    activePopouts.set(postId, { window: popWin, type: isScreen ? 'screen' : 'post' });
+
+    try {
+      popWin.document.open();
+      popWin.document.write(generatePopoutHTML(post, isScreen));
+      popWin.document.close();
+      setupPopoutWindow(popWin, post, isScreen);
+    } catch (err) {
+      console.error('Error al inicializar ventana emergente:', err);
+    }
+
+    refreshCard(postId);
+    updatePostDetailPopoutBtn();
+    showToast(`🪟 Ventana flotante abierta para "${post.topic || post.author}". Puedes llevarla a tu pantalla inalámbrica.`, 'success');
+  }
+
   function buildScreenStageHTML(post) {
     if (!post.screenShare?.active) return '';
     const isPresenter = screenManager.isPresenting(post.id) || post.screenShare.sharerSocketId === socket.id;
     const isExpanded = state.expandedCards.has(post.id);
     const hasStream = Boolean(screenManager.getStream(post.id));
     const isPaused = Boolean(post.screenShare.pausedByTeacher);
+    const isPoppedOut = isPostPoppedOut(post.id);
 
     if (!canUserWatchScreen(post)) {
       const isTeacherAudience = post.screenShare.audience === 'teacher';
@@ -4724,6 +5310,9 @@
             <span class="screen-teacher-slot">${buildScreenTeacherBtnsHTML(post)}</span>
           </div>
           <div class="screen-controls-group">
+            <button type="button" class="screen-ctrl-btn ${isPoppedOut ? 'active-highlight' : ''}" data-action="${isPoppedOut ? 'return-popout' : 'popout-screen'}" title="${isPoppedOut ? 'Regresar pantalla al panel' : 'Llevar a ventana flotante para pantalla inalámbrica o proyector'}">
+              ${isPoppedOut ? '↩️ Regresar' : '🪟 Flotante'}
+            </button>
             <button type="button" class="screen-ctrl-btn advanced-only" data-action="toggle-expand" title="Ampliar o reducir tarjeta">${
               isExpanded ? '⤡ Reducir' : '⤢ Ampliar'
             }</button>
@@ -4880,6 +5469,9 @@
       ? `<span class="teacher-author-badge" title="Publicación oficial del profesor">👨‍🏫 Profesor</span>`
       : '';
 
+    const isPoppedOut = isPostPoppedOut(post.id);
+    const popoutBtn = `<button type="button" class="action-chip popout-btn ${isPoppedOut ? 'popout-active' : ''}" data-action="${isPoppedOut ? 'return-popout' : 'popout-post'}" title="${isPoppedOut ? 'Regresar publicación al panel principal' : 'Abrir en ventana flotante independiente para pantalla inalámbrica o proyector'}">${isPoppedOut ? '↩ Regresar' : '🪟 Flotante'}</button>`;
+
     return {
       headerHtml: `
         <div class="card-author-block">
@@ -4960,6 +5552,7 @@
             </svg>
             <span>Ver</span>
           </button>
+          ${popoutBtn}
           ${shareFooterBtn}
           ${reEnqueueBtn}
         </div>
@@ -5043,6 +5636,13 @@
       if (numEl) numEl.textContent = String(post.screenShare.viewerCount || 0);
       const expBtn = screenSlot.querySelector('[data-action="toggle-expand"]');
       if (expBtn) expBtn.textContent = state.expandedCards.has(post.id) ? '⤡ Reducir' : '⤢ Ampliar';
+      const popBtn = screenSlot.querySelector('[data-action="popout-screen"], [data-action="return-popout"]');
+      if (popBtn) {
+        const isPopped = isPostPoppedOut(post.id);
+        popBtn.textContent = isPopped ? '↩️ Regresar' : '🪟 Flotante';
+        popBtn.dataset.action = isPopped ? 'return-popout' : 'popout-screen';
+        popBtn.classList.toggle('active-highlight', isPopped);
+      }
       syncCardStream(cardEl, post);
     }
   }
@@ -5271,7 +5871,17 @@
     }
 
     openModal(el.postDetailModal);
+    updatePostDetailPopoutBtn();
   }
+
+  el.btnPopoutPostDetail?.addEventListener('click', () => {
+    if (!activeDetailPost) return;
+    if (isPostPoppedOut(activeDetailPost.id)) {
+      returnPopout(activeDetailPost.id);
+    } else {
+      openPopoutForPost(activeDetailPost.id);
+    }
+  });
 
   el.btnDownloadPostText?.addEventListener('click', () => {
     if (!activeDetailPost) return;
@@ -5667,6 +6277,10 @@
           showToast('No se pudo activar Imagen en imagen', 'error');
         }
       }
+    } else if (action === 'popout-post' || action === 'popout-screen') {
+      openPopoutForPost(postId);
+    } else if (action === 'return-popout') {
+      returnPopout(postId);
     }
   }
 
@@ -6873,6 +7487,11 @@
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Error al guardar');
+      }
+      const updated = await res.json().catch(() => null);
+      if (updated) {
+        state.board = updated;
+        renderBoardMeta();
       }
       closeModal(el.boardEditModal);
       showToast('Institución y evento actualizados correctamente', 'success');

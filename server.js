@@ -1001,6 +1001,10 @@ function buildSessionSnapshot(sessionId, { socketId = null, isTeacher = false } 
       sessions,
       board: {
         title: 'PadletLocal',
+        institutionName: 'Institución Educativa',
+        institutionLogo: '',
+        institutionLogoShape: 'square',
+        institutionLogoSize: 'normal',
         description: 'Selecciona una sesión habilitada por el profesor para comenzar.',
       },
       posts: [],
@@ -2358,7 +2362,7 @@ io.on('connection', (socket) => {
         if (authorName && q.author?.toLowerCase() === authorName.toLowerCase()) return false;
         return true;
       });
-      sessionScreenQueues.set(session.id, nextQueue);
+      setSessionQueue(session.id, nextQueue);
       broadcastScreenQueue(session.id);
 
       // Kick matching sockets

@@ -125,38 +125,62 @@ textarea {
 
 /* Brand Logo sizing and shapes */
 .brand-logo.logo-size-compact {
-  height: 34px;
+  height: 34px !important;
 }
 .brand-logo.logo-size-normal {
-  height: 44px;
+  height: 44px !important;
 }
 .brand-logo.logo-size-large {
-  height: 54px;
+  height: 54px !important;
 }
 
 .brand-logo.logo-shape-square.logo-size-compact {
-  width: 34px;
+  width: 34px !important;
+  height: 34px !important;
 }
 .brand-logo.logo-shape-square.logo-size-normal {
-  width: 44px;
+  width: 44px !important;
+  height: 44px !important;
 }
 .brand-logo.logo-shape-square.logo-size-large {
-  width: 54px;
+  width: 54px !important;
+  height: 54px !important;
 }
 
 .brand-logo.logo-shape-wide {
-  width: auto;
-  min-width: 44px;
-  max-width: 175px;
-  padding: 2px 8px;
-  background: #ffffff;
+  width: 125px !important;
+  min-width: 90px !important;
+  max-width: 180px !important;
+  padding: 2px 8px !important;
+  background: #ffffff !important;
+  border-radius: 10px !important;
+}
+
+.brand-logo.logo-shape-wide.logo-size-compact {
+  height: 34px !important;
+  width: 96px !important;
+}
+.brand-logo.logo-shape-wide.logo-size-normal {
+  height: 44px !important;
+  width: 125px !important;
+}
+.brand-logo.logo-shape-wide.logo-size-large {
+  height: 54px !important;
+  width: 155px !important;
 }
 
 .brand-logo.logo-shape-wide .institution-logo-img {
-  width: auto;
-  max-width: 165px;
-  height: 100%;
-  object-fit: contain;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  background: transparent !important;
+}
+
+.brand-logo.logo-shape-wide .institution-logo-svg {
+  width: 100% !important;
+  height: 100% !important;
+  color: #1e40af !important;
 }
 
 /* Modal Logo Uploader & Shape Selector */
@@ -1360,6 +1384,36 @@ textarea {
 
 .action-chip.stop-share-btn:hover {
   background: var(--live-hover);
+}
+
+.action-chip.popout-btn {
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: var(--bg-card);
+}
+
+.action-chip.popout-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft, #eff6ff);
+}
+
+.action-chip.popout-active {
+  color: #ffffff !important;
+  background: #2563eb !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35) !important;
+}
+
+.action-chip.popout-active:hover {
+  background: #1d4ed8 !important;
+}
+
+.screen-ctrl-btn.active-highlight {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5) !important;
 }
 
 /* --- Comments Section Inside Card --- */
@@ -6040,9 +6094,14 @@ body.role-teacher .student-only {
     padding: 8px 12px;
     gap: 8px;
   }
-  .brand-logo {
+  .brand-logo:not(.logo-shape-wide) {
     width: 36px;
     height: 36px;
+  }
+  .brand-logo.logo-shape-wide {
+    width: 95px !important;
+    height: 36px !important;
+    max-width: 120px !important;
   }
   .brand-title-row h1 {
     font-size: 1.05rem;
@@ -6321,9 +6380,15 @@ body.role-teacher .student-only {
     padding: 6px 8px;
     gap: 6px;
   }
-  .brand-logo {
+  .brand-logo:not(.logo-shape-wide) {
     width: 30px;
     height: 30px;
+  }
+  .brand-logo.logo-shape-wide {
+    width: 78px !important;
+    height: 30px !important;
+    max-width: 90px !important;
+    padding: 2px 4px !important;
   }
   .brand-title-row h1 {
     font-size: 0.95rem;
